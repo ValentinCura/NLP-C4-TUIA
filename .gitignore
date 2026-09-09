@@ -5,5 +5,10 @@ __pycache__/
 # Buffer incremental de la extraccion: se regenera solo, no se versiona
 data/libros_parcial.jsonl
 
-# HTML de muestra usado para probar los parsers sin tocar la red
-tests/fixtures/*.html
+# Los HTML de tests/fixtures/ SI se versionan a proposito: son los que permiten
+# correr los tests sin conexion y sin castigar al sitio. Ademas dejan registrado
+# como era el HTML de Lectulandia al momento de la extraccion.
+
+# Archivos de bloqueo que crean Excel / LibreOffice al abrir el CSV
+.~lock.*#
+~$*

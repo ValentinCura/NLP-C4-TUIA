@@ -1,0 +1,7 @@
+# Los HTML de prueba se guardan byte a byte como los sirvio el sitio.
+# Sin esto, git normalizaria los finales de linea al clonar y las fixtures
+# dejarian de ser una copia fiel de lo que devuelve Lectulandia.
+tests/fixtures/*.html -text
+
+# El dataset se versiona tal cual lo escribe pandas.
+data/libros.csv -text
