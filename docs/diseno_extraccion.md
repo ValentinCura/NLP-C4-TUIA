@@ -6,11 +6,11 @@ Unidad 1, Procesamiento del Lenguaje Natural (TUIA — FCEIA/UNR).
 
 ## 1. Categorías seleccionadas
 
-El sitio es **Lectulandia**, en su dominio vivo `https://ww3.lectulandia.co`.
+El sitio es **Lectulandia**, en la URL que indica el enunciado del trabajo práctico:
+`https://ww3.lectulandia.co`.
 
-> Los dominios `lectulandia.com` y `ww3.lectulandia.com` devuelven **HTTP 403**. El dominio
-> está aislado en la constante `BASE_URL` de `src/scraper.py` para poder cambiarlo en un
-> solo lugar cuando vuelva a migrar.
+> Esa URL está aislada en la constante `BASE_URL` de `src/scraper.py`, de modo que si el
+> sitio cambiara de dominio se corrija en un solo lugar.
 
 La cátedra habilitó usar más de una categoría. Se eligieron **cuatro**:
 

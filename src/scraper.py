@@ -25,8 +25,9 @@ from bs4 import BeautifulSoup
 # Configuracion
 # ---------------------------------------------------------------------------
 
-# El dominio cambia cada tanto: lectulandia.com y ww3.lectulandia.com devuelven
-# 403. Si la extraccion deja de funcionar, lo primero a revisar es esta linea.
+# URL del sitio, tal como la indica el enunciado del trabajo practico.
+# Aislada aca para poder cambiarla en un solo lugar si el sitio migrara de
+# dominio: si la extraccion deja de funcionar, es lo primero que hay que mirar.
 BASE_URL = "https://ww3.lectulandia.co"
 
 # Prefijos constantes que NO se guardan en el CSV.

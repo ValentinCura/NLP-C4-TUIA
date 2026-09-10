@@ -246,9 +246,9 @@ url completa de la ficha   = "https://ww3.lectulandia.co/book/"    + url_libro
 url completa de la portada = "https://assets.lectulandia.co/b/ab/" + portada
 ```
 
-Repetir esos prefijos en las 200 filas sería almacenar el mismo dato 200 veces. Además, el
-dominio del sitio ya migró una vez: aislarlo permite corregirlo tocando una constante en
-lugar de reescribir el dataset entero.
+Repetir esos prefijos en las 200 filas sería almacenar el mismo dato 200 veces. Tenerlos
+aislados en una constante permite además corregirlos en un solo lugar si el sitio cambiara
+de dominio, en lugar de reescribir el dataset entero.
 
 ### Campos multivaluados
 
@@ -318,10 +318,6 @@ tests/
 ```
 
 ## Principales dificultades encontradas
-
-**El dominio del sitio cambió.** `lectulandia.com` y `ww3.lectulandia.com` devuelven HTTP
-403. Hubo que localizar el dominio vivo (`ww3.lectulandia.co`) y aislarlo en una constante,
-porque es razonable que vuelva a migrar.
 
 **La ficha individual contiene tarjetas de otros libros.** Cada ficha trae 12
 `<article class="card">` con libros relacionados en el lateral — exactamente la misma
