@@ -678,11 +678,17 @@ def resumen_dataset(df):
               f"   {ejemplo[:44]}")
 
 
-def validar(df):
+def validar(df, rango_esperado=(50, 200)):
     """Controles minimos exigidos por la consigna, mas algunos propios.
 
     Devuelve la lista de problemas encontrados: vacia significa que el dataset
     esta listo para entregar.
+
+    rango_esperado acota la cantidad de libros. Vale (50, 200) para el
+    entregable de la Unidad 1, que es lo que pide la consigna, pero se pasa None
+    cuando se arma otro corpus (por ejemplo el ampliado para entrenar
+    embeddings), donde ese limite no tiene sentido: un corpus de 1700 libros no
+    esta mal, simplemente no es el entregable.
     """
     import pandas as pd
 
@@ -717,7 +723,13 @@ def validar(df):
     nans = int(df.isna().sum().sum()) - int(df["serie_num"].isna().sum())
     control(nans == 0, "ausentes consistentes (solo serie_num admite nulo)")
 
-    control(50 <= len(df) <= 200, "cantidad entre 50 y 200", f" ({len(df)})")
+    if rango_esperado:
+        minimo, maximo = rango_esperado
+        control(minimo <= len(df) <= maximo,
+                f"cantidad entre {minimo} y {maximo}", f" ({len(df)})")
+    else:
+        print(f"  [--- ] cantidad de libros: {len(df)} "
+              f"(sin limite: no es el corpus entregable)")
 
     # --- Propios, pensando en el recomendador de la Unidad 2 ---
     json_ok = True
@@ -788,7 +800,7 @@ def main():
     if args.solo_consolidar:
         df = consolidar(ruta_parcial, ruta_csv)
         resumen_dataset(df)
-        return 1 if validar(df) else 0
+        return 1 if validar(df, _rango(ruta_csv)) else 0
 
     # Import local: asi los parsers se pueden importar y testear sin tener
     # Playwright instalado ni levantar un navegador.
@@ -816,10 +828,15 @@ def main():
 
     df = consolidar(ruta_parcial, ruta_csv)
     resumen_dataset(df)
-    problemas = validar(df)
+    problemas = validar(df, _rango(ruta_csv))
 
     print(f"\nCorrida completada en {time.time() - inicio:.0f}s")
     return 1 if problemas else 0
+
+
+def _rango(ruta_csv):
+    """Que rango de cantidad exigir segun el corpus que se este armando."""
+    return (50, 200) if ruta_csv == RUTA_CSV else None
 
 
 def resumen_descubrimiento(encontrados, categorias):

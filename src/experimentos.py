@@ -183,7 +183,10 @@ def _control_positivo(detector):
 # ===========================================================================
 
 # Tamanos de corpus de fondo a probar.
-TAMANOS = [10, 25, 50, 100, 150]
+# Se extiende automaticamente si el corpus lo permite (el ampliado, de 1700
+# documentos, llega a tamanos grandes manteniendo bajo el solape entre
+# replicas, que es la limitacion del corpus de 200).
+TAMANOS = [10, 25, 50, 100, 150, 300, 600, 1200]
 
 # Cuantas replicas por tamano. Mas replicas dan una media mas confiable; 30 es
 # suficiente para que la curva no se mueva entre corridas.
@@ -269,6 +272,7 @@ def experimento_estabilidad(docs, semilla=42):
     curva = []
     anterior = None
     for n in TAMANOS:
+        # Se descartan los tamanos que no entran en el corpus disponible.
         if n > len(fondo_disponible):
             continue
 
@@ -317,10 +321,20 @@ def experimento_estabilidad(docs, semilla=42):
         print(f"  alcanza para afirmar que TF-IDF se estabilizo: haria falta")
         print(f"  seguir la curva con mas documentos.")
 
-    print(f"\n  Por que cuesta tanto estabilizarse: el 63% del vocabulario de")
-    print(f"  este corpus aparece UNA SOLA VEZ. TF-IDF premia exactamente esos")
-    print(f"  terminos, porque su IDF es maximo. Entonces los caracteristicos")
-    print(f"  de un documento son, en buena medida, accidentes de muestreo.")
+    # El porcentaje se calcula sobre el corpus que se esta usando, no se
+    # escribe a mano: cambia mucho entre el corpus de 200 (63%) y el ampliado
+    # (51%), asi que una cifra fija seria falsa en uno de los dos casos.
+    vocabulario_global = Counter(p for i in textos for p in textos[i].split())
+    hapax = sum(1 for c in vocabulario_global.values() if c == 1)
+    pct_hapax = 100 * hapax / len(vocabulario_global)
+
+    print(f"\n  Por que cuesta tanto estabilizarse: el {pct_hapax:.0f}% del "
+          f"vocabulario")
+    print(f"  de este corpus ({hapax:,} de {len(vocabulario_global):,} "
+          f"palabras) aparece UNA SOLA VEZ.")
+    print(f"  TF-IDF premia exactamente esos terminos, porque su IDF es")
+    print(f"  maximo. Entonces los terminos caracteristicos de un documento")
+    print(f"  son, en buena medida, accidentes de muestreo.")
 
     print(f"\n  COMO SE MIDE, que es lo que pregunta la consigna: se fijan los")
     print(f"  documentos, se varia el corpus de fondo, y se mide el solapamiento")
