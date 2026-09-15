@@ -341,12 +341,312 @@ def _jaccard(a, b):
 
 
 # ===========================================================================
+# Pregunta 3 - Como cambia la evaluacion en multi-etiqueta?
+# ===========================================================================
+
+def experimento_multietiqueta(docs, semilla=42):
+    """Compara las metricas de evaluacion sobre el mismo clasificador.
+
+    La consigna pregunta como cambia la evaluacion respecto de multi-clase. La
+    respuesta corta es que en multi-clase hay UNA metrica obvia (accuracy) y en
+    multi-etiqueta no hay ninguna: hay varias que miden cosas distintas y que
+    pueden contar historias opuestas sobre el mismo modelo.
+    """
+    import numpy as np
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import (accuracy_score, f1_score, hamming_loss,
+                                 precision_score, recall_score)
+    from sklearn.model_selection import train_test_split
+    from sklearn.multiclass import OneVsRestClassifier
+    from sklearn.preprocessing import MultiLabelBinarizer
+
+    titulo("PREGUNTA 3 - Evaluacion multi-etiqueta contra multi-clase")
+
+    etiquetas = [d.generos for d in docs]
+    conteo = Counter(g for gs in etiquetas for g in gs)
+
+    print(f"\nPor que este problema NO PUEDE ser multi-clase")
+    print(f"  etiquetas por libro: minimo {min(len(g) for g in etiquetas)}, "
+          f"promedio {sum(len(g) for g in etiquetas) / len(etiquetas):.2f}, "
+          f"maximo {max(len(g) for g in etiquetas)}")
+    print(f"  No hay un solo libro con un unico genero. Forzar multi-clase")
+    print(f"  obligaria a descartar etiquetas reales o a inventar una clase")
+    print(f"  por cada combinacion observada, que serian decenas con pocos")
+    print(f"  ejemplos cada una.")
+
+    print(f"\nDistribucion de las {len(conteo)} etiquetas")
+    for genero, n in conteo.most_common(6):
+        print(f"  {genero:<20} {n:>4}  ({100 * n / len(docs):>4.0f}% de los libros)")
+    raras = [g for g, n in conteo.items() if n < 5]
+    print(f"  ... {len(raras)} generos con menos de 5 libros: no se pueden")
+    print(f"  aprender NI estratificar en un split.")
+
+    # Se descartan las etiquetas sin soporte suficiente. La alternativa seria
+    # estratificacion iterativa multi-etiqueta; se elige el umbral por
+    # simplicidad, pero lo importante es DECIR que se hizo y por que.
+    minimo = 10
+    frecuentes = sorted(g for g, n in conteo.items() if n >= minimo)
+    print(f"\n  Se trabaja con los {len(frecuentes)} generos con >= {minimo} "
+          f"libros: {frecuentes}")
+
+    y_listas = [[g for g in gs if g in frecuentes] for gs in etiquetas]
+    mlb = MultiLabelBinarizer(classes=frecuentes)
+    Y = mlb.fit_transform(y_listas)
+    X_texto = preprocesamiento.para_sklearn([d.texto for d in docs])
+
+    X_tr, X_te, Y_tr, Y_te = train_test_split(
+        X_texto, Y, test_size=0.3, random_state=semilla)
+
+    vec = TfidfVectorizer(min_df=2)
+    X_tr_v = vec.fit_transform(X_tr)
+    X_te_v = vec.transform(X_te)
+
+    modelo = OneVsRestClassifier(
+        LogisticRegression(max_iter=1000, class_weight="balanced"))
+    modelo.fit(X_tr_v, Y_tr)
+    Y_pred = modelo.predict(X_te_v)
+
+    # El comparador imprescindible: predecir siempre las etiquetas mas comunes
+    # del entrenamiento, sin mirar el texto.
+    mayoritarias = (Y_tr.mean(axis=0) > 0.5).astype(int)
+    Y_trivial = np.tile(mayoritarias, (len(Y_te), 1))
+
+    print(f"\n  entrenamiento {len(Y_tr)} libros | prueba {len(Y_te)} libros")
+    print(f"\n{'metrica':<22}{'clasificador':>14}{'trivial':>12}   que mide")
+    print("  " + "-" * 82)
+
+    def fila(nombre, valor_modelo, valor_trivial, explicacion):
+        print(f"{nombre:<22}{valor_modelo:>14.3f}{valor_trivial:>12.3f}   "
+              f"{explicacion}")
+
+    fila("subset accuracy", accuracy_score(Y_te, Y_pred),
+         accuracy_score(Y_te, Y_trivial),
+         "acierta el conjunto EXACTO")
+    fila("hamming loss", hamming_loss(Y_te, Y_pred),
+         hamming_loss(Y_te, Y_trivial),
+         "errores por etiqueta (menos es mejor)")
+    fila("f1 micro", f1_score(Y_te, Y_pred, average="micro", zero_division=0),
+         f1_score(Y_te, Y_trivial, average="micro", zero_division=0),
+         "agrega todas las decisiones")
+    fila("f1 macro", f1_score(Y_te, Y_pred, average="macro", zero_division=0),
+         f1_score(Y_te, Y_trivial, average="macro", zero_division=0),
+         "promedia por genero, sin pesar")
+    fila("precision micro",
+         precision_score(Y_te, Y_pred, average="micro", zero_division=0),
+         precision_score(Y_te, Y_trivial, average="micro", zero_division=0), "")
+    fila("recall micro",
+         recall_score(Y_te, Y_pred, average="micro", zero_division=0),
+         recall_score(Y_te, Y_trivial, average="micro", zero_division=0), "")
+
+    print(f"\nLO QUE MUESTRA LA COLUMNA 'TRIVIAL'")
+    print(f"  Ese clasificador no lee el texto: predice siempre las etiquetas")
+    print(f"  presentes en mas de la mitad de los libros de entrenamiento, que")
+    print(f"  aca son {[frecuentes[i] for i, v in enumerate(mayoritarias) if v]}.")
+    f1_micro_triv = f1_score(Y_te, Y_trivial, average="micro", zero_division=0)
+    f1_macro_triv = f1_score(Y_te, Y_trivial, average="macro", zero_division=0)
+    print(f"  Con eso saca f1 micro {f1_micro_triv:.3f} y f1 macro "
+          f"{f1_macro_triv:.3f}.")
+    print(f"  Reportar solo micro-F1 haria pasar por aceptable a un modelo que")
+    print(f"  no mira la entrada. Es el efecto de que 'Novela' aparezca en el")
+    print(f"  {100 * conteo['Novela'] / len(docs):.0f}% de los libros.")
+
+    print(f"\nRESPUESTA A LA PREGUNTA")
+    print(f"  En multi-clase las predicciones son mutuamente excluyentes: hay")
+    print(f"  una sola respuesta correcta, accuracy la resume bien y la matriz")
+    print(f"  de confusion es cuadrada y legible.")
+    print(f"\n  En multi-etiqueta cambia todo eso:")
+    print(f"   - el acierto deja de ser binario: predecir 2 de 3 generos no es")
+    print(f"     ni un acierto ni un error completo;")
+    print(f"   - subset accuracy es demasiado severa (castiga igual errar una")
+    print(f"     etiqueta que errarlas todas);")
+    print(f"   - hamming loss es mas indulgente pero se deja enganar por el")
+    print(f"     desbalance: predecir todo en cero ya da un valor bajo;")
+    print(f"   - micro y macro se separan: micro pondera por frecuencia y se lo")
+    print(f"     lleva la etiqueta dominante, macro trata igual a un genero con")
+    print(f"     170 libros y a uno con 10;")
+    print(f"   - no hay una matriz de confusion unica, sino una por etiqueta;")
+    print(f"   - el split no se puede estratificar de la forma habitual, porque")
+    print(f"     estratificar por una etiqueta desbalancea las demas.")
+    print(f"\n  En la practica: reportar SIEMPRE micro y macro juntas, y")
+    print(f"  siempre contra una linea base trivial. Una sola de las tres")
+    print(f"  cifras, aislada, no permite saber si el modelo aprendio algo.")
+
+    return {"frecuentes": frecuentes}
+
+
+# ===========================================================================
+# Pregunta 2 - Que sesgo introduce que las sinopsis sean texto promocional?
+# ===========================================================================
+
+# Vocabulario del registro publicitario: palabras que valoran la obra o apelan
+# al lector, en vez de describir de que trata el libro.
+#
+# La lista se armo a mano leyendo sinopsis del corpus. Es necesariamente
+# incompleta y discutible, y esa es una limitacion honesta del experimento: mide
+# el sesgo que capta esta lista, no "el sesgo promocional" en abstracto.
+LEXICO_PROMOCIONAL = {
+    # juicio de valor sobre la obra
+    "imprescindible", "magistral", "brillante", "extraordinario", "excepcional",
+    "inolvidable", "memorable", "deslumbrante", "impecable", "soberbio",
+    "fascinante", "cautivador", "conmovedor", "estremecedor", "trepidante",
+    "adictivo", "vibrante", "apasionante", "absorbente", "hipnotico",
+    # consagracion y ventas
+    "bestseller", "superventas", "exito", "fenomeno", "aclamado", "celebrado",
+    "premio", "premiada", "premiado", "galardonada", "galardonado",
+    "millones", "lectores", "critica", "reconocido", "consagrado",
+    "clasico", "obra", "maestra", "revelacion", "imperdible",
+    # apelacion al lector
+    "descubre", "sumergete", "prepare", "atrapara", "sorprendera",
+    "dejara", "soltar", "aliento", "nadie", "jamas",
+    # marcas editoriales
+    "autora", "autor", "novela", "saga", "trilogia", "edicion", "traduccion",
+}
+
+
+def experimento_promocional(docs, semilla=42):
+    """Mide cuanto pesa el vocabulario publicitario y si predice el genero.
+
+    La consigna pregunta que sesgo introduce entrenar un clasificador de genero
+    sobre texto escrito para vender. La hipotesis a contrastar es concreta: si
+    las palabras promocionales predicen el genero, el clasificador no esta
+    aprendiendo de que trata el libro sino COMO SE LO PUBLICITA, que son cosas
+    distintas y solo la segunda es un artefacto del canal.
+    """
+    import numpy as np
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.feature_selection import mutual_info_classif
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import f1_score
+    from sklearn.model_selection import train_test_split
+    from sklearn.multiclass import OneVsRestClassifier
+    from sklearn.preprocessing import MultiLabelBinarizer
+
+    titulo("PREGUNTA 2 - El sesgo del texto promocional")
+
+    textos = preprocesamiento.para_sklearn([d.texto for d in docs])
+
+    # --- 1. Cuanto pesa el vocabulario promocional en los terminos top -----
+    vec = TfidfVectorizer()
+    matriz = vec.fit_transform(textos)
+    vocabulario = vec.get_feature_names_out()
+
+    def es_promocional(termino):
+        return preprocesamiento._sin_acentos(termino) in LEXICO_PROMOCIONAL
+
+    promocionales_en_top = 0
+    total_top = 0
+    ejemplos = Counter()
+    for i in range(matriz.shape[0]):
+        fila = matriz[i].toarray().ravel()
+        top = [vocabulario[j] for j in fila.argsort()[::-1][:10] if fila[j] > 0]
+        for termino in top:
+            total_top += 1
+            if es_promocional(termino):
+                promocionales_en_top += 1
+                ejemplos[termino] += 1
+
+    print(f"\n1. Presencia en los terminos caracteristicos")
+    print(f"   De los {total_top} terminos top-10 de las {len(docs)} sinopsis,")
+    print(f"   {promocionales_en_top} son vocabulario promocional "
+          f"({100 * promocionales_en_top / total_top:.1f}%).")
+    if ejemplos:
+        print(f"   Los mas frecuentes: "
+              f"{[t for t, _ in ejemplos.most_common(8)]}")
+    print(f"\n   Es un porcentaje BAJO, y tiene una explicacion que conviene")
+    print(f"   entender: TF-IDF penaliza justamente lo que aparece en todos los")
+    print(f"   documentos. Como las sinopsis son TODAS promocionales, esas")
+    print(f"   palabras tienen IDF bajo y quedan relegadas. O sea que TF-IDF")
+    print(f"   ya filtra parte del sesgo por construccion.")
+
+    # --- 2. El vocabulario promocional predice el genero? ------------------
+    etiquetas = [d.generos for d in docs]
+    conteo = Counter(g for gs in etiquetas for g in gs)
+    frecuentes = sorted(g for g, n in conteo.items() if n >= 20)
+
+    print(f"\n2. El registro publicitario, predice el genero?")
+    print(f"   Informacion mutua entre cada termino promocional y cada genero.")
+    print(f"   Si diera cero, el vocabulario promocional seria ruido inocuo.")
+
+    indices_promo = [j for j, t in enumerate(vocabulario) if es_promocional(t)]
+    if indices_promo:
+        X_promo = matriz[:, indices_promo].toarray()
+        nombres_promo = [vocabulario[j] for j in indices_promo]
+
+        filas = []
+        for genero in frecuentes:
+            y = np.array([1 if genero in gs else 0 for gs in etiquetas])
+            mi = mutual_info_classif(X_promo, y, random_state=semilla)
+            mejor = int(np.argmax(mi))
+            filas.append((genero, nombres_promo[mejor], mi[mejor], mi.mean()))
+
+        print(f"\n   {'genero':<20}{'termino promo mas informativo':<32}"
+              f"{'IM':>8}{'IM media':>10}")
+        print("   " + "-" * 68)
+        for genero, termino, im, media in sorted(filas, key=lambda f: -f[2]):
+            print(f"   {genero:<20}{termino:<32}{im:>8.4f}{media:>10.4f}")
+
+    # --- 3. Efecto real sobre un clasificador ------------------------------
+    print(f"\n3. Que pasa si se le quita el vocabulario promocional al modelo")
+
+    mlb = MultiLabelBinarizer(classes=frecuentes)
+    Y = mlb.fit_transform([[g for g in gs if g in frecuentes]
+                           for gs in etiquetas])
+
+    resultados = {}
+    for nombre, stop in [("con vocabulario promocional", None),
+                         ("sin vocabulario promocional",
+                          sorted(LEXICO_PROMOCIONAL))]:
+        X_tr, X_te, Y_tr, Y_te = train_test_split(
+            textos, Y, test_size=0.3, random_state=semilla)
+        v = TfidfVectorizer(min_df=2, stop_words=stop)
+        modelo = OneVsRestClassifier(
+            LogisticRegression(max_iter=1000, class_weight="balanced"))
+        modelo.fit(v.fit_transform(X_tr), Y_tr)
+        pred = modelo.predict(v.transform(X_te))
+        resultados[nombre] = (
+            f1_score(Y_te, pred, average="micro", zero_division=0),
+            f1_score(Y_te, pred, average="macro", zero_division=0))
+        print(f"   {nombre:<32} f1 micro {resultados[nombre][0]:.3f}  "
+              f"f1 macro {resultados[nombre][1]:.3f}")
+
+    caida = (resultados["con vocabulario promocional"][0]
+             - resultados["sin vocabulario promocional"][0])
+    print(f"\n   Diferencia en f1 micro: {caida:+.3f}")
+
+    print(f"\nRESPUESTA A LA PREGUNTA")
+    print(f"  El sesgo existe pero no es el que uno esperaria. Las palabras")
+    print(f"  publicitarias no dominan los terminos caracteristicos, porque")
+    print(f"  TF-IDF ya las castiga por aparecer en todas las sinopsis.")
+    print(f"\n  El sesgo real es mas sutil y esta en otro lado:")
+    print(f"   - Una sinopsis NO DESCRIBE el libro: selecciona lo vendible.")
+    print(f"     Omite el final, exagera el conflicto y destaca lo que se")
+    print(f"     parece a otros exitos. El clasificador aprende de que trata")
+    print(f"     LA CAMPANA, no de que trata el libro.")
+    print(f"   - Cada genero tiene su registro publicitario propio, y eso es")
+    print(f"     senal aprendible pero fragil: un libro de terror promocionado")
+    print(f"     como literario se clasificaria mal, y el modelo no generalizaria")
+    print(f"     a texto que no sea de contratapa (resenas, criticas, el libro).")
+    print(f"   - Las sinopsis son de longitud y estructura uniformes porque las")
+    print(f"     escribe el mismo departamento de marketing: menos variedad")
+    print(f"     lexica de la que tendria texto natural del mismo tamano.")
+    print(f"\n  Para un recomendador el sesgo molesta menos, porque comparar")
+    print(f"  sinopsis con sinopsis mantiene el registro constante en ambos")
+    print(f"  lados. Para un clasificador que despues vea otro tipo de texto,")
+    print(f"  en cambio, es un problema de generalizacion serio.")
+
+    return resultados
+
+
+# ===========================================================================
 # Punto de entrada
 # ===========================================================================
 
 EXPERIMENTOS = {
     "idioma": experimento_idioma,
     "estabilidad": experimento_estabilidad,
+    "promocional": experimento_promocional,
+    "multietiqueta": experimento_multietiqueta,
 }
 
 
