@@ -648,7 +648,14 @@ def consolidar(ruta_parcial, ruta_csv):
     df = df.sort_values("id").reset_index(drop=True)
 
     # na_rep="" -> los ausentes salen como celda vacia, igual que el resto.
-    df.to_csv(ruta_csv, index=False, na_rep="", encoding=ENCODING_CSV)
+    #
+    # lineterminator="\n" es importante aunque parezca cosmetico: por defecto
+    # pandas usa el salto de linea del sistema operativo, asi que el mismo
+    # dataset regenerado en Windows y en Linux da archivos distintos byte a
+    # byte. Eso ensucia el repo con diffs de 200 lineas donde no cambio ni un
+    # dato. Fijarlo hace que la salida sea identica en cualquier maquina.
+    df.to_csv(ruta_csv, index=False, na_rep="", encoding=ENCODING_CSV,
+              lineterminator="\n")
     print(f"\nEscrito: {ruta_csv}  ({len(df)} filas)")
     return df
 
@@ -761,11 +768,25 @@ def main():
     parser.add_argument("--solo-consolidar", action="store_true",
                         help="salta la red y regenera el CSV desde el parcial "
                              "ya guardado")
+    # Rutas parametrizables: permiten armar un corpus aparte (por ejemplo uno
+    # mas grande, para entrenar embeddings) sin tocar el entregable de la
+    # Unidad 1. Cada corpus necesita SU PROPIO parcial: si dos corridas
+    # compartieran el jsonl, la segunda creeria que ya extrajo los libros de la
+    # primera y el CSV saldria incompleto.
+    parser.add_argument("--salida", type=Path, default=RUTA_CSV,
+                        help="ruta del CSV final (default: data/libros.csv)")
+    parser.add_argument("--parcial", type=Path, default=None,
+                        help="ruta del jsonl incremental (default: el que "
+                             "corresponde a --salida)")
     args = parser.parse_args()
+
+    ruta_csv = args.salida
+    ruta_parcial = args.parcial or ruta_csv.with_name(
+        ruta_csv.stem + "_parcial.jsonl")
 
     # Regenerar el CSV no necesita internet: se hace desde el JSONL de trabajo.
     if args.solo_consolidar:
-        df = consolidar(RUTA_PARCIAL, RUTA_CSV)
+        df = consolidar(ruta_parcial, ruta_csv)
         resumen_dataset(df)
         return 1 if validar(df) else 0
 
@@ -774,7 +795,7 @@ def main():
     from playwright.sync_api import sync_playwright
 
     inicio = time.time()
-    DIR_DATOS.mkdir(parents=True, exist_ok=True)
+    ruta_csv.parent.mkdir(parents=True, exist_ok=True)
 
     with sync_playwright() as pw:
         navegador = pw.chromium.launch(headless=not args.ver_navegador)
@@ -788,11 +809,12 @@ def main():
                 print(f"\nFase A completada en {time.time() - inicio:.0f}s")
                 return
 
-            extraer_libros(pagina, encontrados, RUTA_PARCIAL, args.max_libros)
+            extraer_libros(pagina, encontrados, ruta_parcial,
+                           args.max_libros)
         finally:
             navegador.close()
 
-    df = consolidar(RUTA_PARCIAL, RUTA_CSV)
+    df = consolidar(ruta_parcial, ruta_csv)
     resumen_dataset(df)
     problemas = validar(df)
 

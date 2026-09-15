@@ -1,4 +1,18 @@
+# Unidad 1 - scraping
 playwright==1.56.0
 beautifulsoup4==4.14.2
 lxml==6.0.2
 pandas==2.3.3
+
+# Unidad 2 - base de datos
+psycopg[binary]==3.2.12
+python-dotenv==1.2.1
+
+# Unidad 2 - procesamiento del lenguaje
+spacy==3.8.16
+scikit-learn==1.9.1
+gensim==4.4.0
+
+# Documentacion (generacion de PDF)
+pypdf==6.18.0
+reportlab==5.0.1

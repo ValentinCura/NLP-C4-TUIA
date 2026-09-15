@@ -1,0 +1,58 @@
+# PostgreSQL para la Unidad 2.
+#
+# Se usa Docker en vez de instalar PostgreSQL en cada maquina porque la version
+# y la configuracion quedan escritas en este archivo, que esta versionado: los
+# cuatro integrantes levantan exactamente la misma base con un comando.
+#
+#   docker compose up -d       levanta la base
+#   docker compose ps          ver estado (tiene que decir "healthy")
+#   docker compose down        apaga, CONSERVANDO los datos
+#   docker compose down -v     apaga y BORRA el volumen (se recarga con el ETL)
+#
+# Importante: Docker es la implementacion recomendada, no un requisito. La
+# conexion sale de variables de entorno (ver .env.example), asi que quien no
+# pueda usar Docker instala PostgreSQL nativo, cambia su .env y no toca una
+# sola linea de Python.
+
+services:
+  db:
+    image: postgres:17-alpine
+    # Nombre fijo para poder hacer `docker exec tuia_postgres ...` sin que
+    # dependa de como se llame la carpeta del proyecto.
+    container_name: tuia_postgres
+
+    environment:
+      POSTGRES_USER: ${PGUSER:-tuia}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-tuia}
+      POSTGRES_DB: ${PGDATABASE:-tuia}
+      # Explicito aunque sea el default: el corpus es castellano con tildes.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+
+    # El "127.0.0.1:" del principio es la parte importante. Sin el, Docker
+    # publica el puerto en 0.0.0.0 y esta base (con password "tuia") quedaria
+    # accesible desde toda la red. Atado a loopback solo se llega desde esta
+    # maquina, que es justamente lo que necesitamos para DBeaver.
+    #
+    # Se usa 5433 en el host, no 5432, para no chocar con un PostgreSQL nativo
+    # que alguno del grupo pueda tener ya instalado. Adentro del contenedor
+    # sigue siendo 5432 siempre.
+    ports:
+      - "127.0.0.1:${PGPORT:-5433}:5432"
+
+    # Volumen NOMBRADO, no un bind mount a una carpeta del repo: el directorio
+    # de datos de PostgreSQL sobre NTFS a traves de WSL2 da errores de permisos
+    # y de fsync, y ademas ensuciaria el repositorio.
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+    # Sin esto, `docker compose up -d` devuelve el control apenas arranca el
+    # contenedor, pero initdb todavia esta creando la base: el ETL lanzado
+    # inmediatamente despues se encontraria con la conexion rechazada.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
