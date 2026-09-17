@@ -17,3 +17,7 @@ data/*_parcial.jsonl
 
 # Configuracion local de conexion. Se versiona .env.example, no el .env real.
 .env
+
+# Modelos de embeddings entrenados: son artefactos regenerables con
+# `python src/embeddings.py entrenar` y pesan varios MB.
+data/modelos/
