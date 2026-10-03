@@ -37,6 +37,21 @@ DEFAULTS = {
 INTENTOS = 10
 ESPERA = 1.0
 
+# Segundos que espera CADA intento antes de darse por vencido.
+#
+# Sin esto, psycopg espera lo que decida el sistema operativo. Medido en esta
+# maquina con Docker Desktop apagado: 130 segundos por intento, que con los 10
+# reintentos son mas de veinte minutos colgado antes de ver el mensaje de error.
+# Con connect_timeout=5 cada intento tarda 5,1 segundos y el caso mas comun
+# (olvidarse de abrir Docker) falla en alrededor de un minuto.
+#
+# Ojo con la diferencia entre los dos modos de falla: cuando PostgreSQL todavia
+# esta arrancando, el puerto existe y RECHAZA la conexion, asi que el intento
+# falla al instante y los reintentos cubren el arranque en unos 10 segundos. El
+# timeout solo entra en juego cuando no hay nadie escuchando y los paquetes se
+# descartan en silencio, que es lo que pasa con Docker apagado.
+TIMEOUT_CONEXION = 5
+
 
 def _config():
     """Lee la configuracion de conexion del entorno.
@@ -56,7 +71,8 @@ def conninfo(ocultar_password=False):
     c = _config()
     password = "***" if ocultar_password else c["PGPASSWORD"]
     return (f"host={c['PGHOST']} port={c['PGPORT']} user={c['PGUSER']} "
-            f"password={password} dbname={c['PGDATABASE']}")
+            f"password={password} dbname={c['PGDATABASE']} "
+            f"connect_timeout={TIMEOUT_CONEXION}")
 
 
 def conectar(intentos=INTENTOS):
