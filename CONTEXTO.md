@@ -20,7 +20,12 @@ Son dos unidades encadenadas sobre el mismo corpus:
 |---|---|---|
 | **1** | Scrapear 100–200 libros de Lectulandia con Playwright + BeautifulSoup, armar un CSV | **Terminada** |
 | **2** | Traer el corpus desde PostgreSQL, responder 4 preguntas sobre TF-IDF, entrenar embeddings y compararlos contra uno pre-entrenado | **Terminada** |
+| **TP2** | Embeddings y búsqueda semántica: SBERT, evaluación con `queries.json`, precision@k contra TF-IDF y piso de azar, notebook e informe | **Implementado; falta validar `queries.json` y cerrar el informe** (ver `docs/AUDITORIA_TP2.md`) |
 | 3 en adelante | Un recomendador de libros | No empezada |
+
+> **TP2, alcance acordado con la cátedra:** no hace falta Postgres ni Supabase (se trabaja
+> desde el CSV), y la parte avanzada y las Partes E/F (pgvector, HNSW, filtro por metadata)
+> quedaron fuera de la consigna.
 
 El repositorio es <https://github.com/ValentinCura/NLP-C4-TUIA>.
 
@@ -75,7 +80,12 @@ src/corpus.py             188         PostgreSQL -> list[Documento]   (texto CRU
 src/preprocesamiento.py   234         tokenizar()                     (TOKENIZADO)
 src/experimentos.py       691         las 4 preguntas, medidas
 src/embeddings.py         532         Word2Vec/FastText propios contra SBW
+src/vectores.py                       TP2: validar (NaN/Inf/nulos/dim), normalizar, coseno
+src/busqueda.py                       TP2: TF-IDF, promedios y SBERT con interfaz comun
+src/evaluacion.py                     TP2: consultas, precision@k con empates, azar, bootstrap
 tests/test_parsers.py     225         pruebas sin red ni base
+tests/test_tp2.py                     TP2: 35 tests, varios adversariales
+tools/                                TP2: generar y ejecutar el notebook
 sql/01_esquema.sql        162         DDL con constraints e indices GIN
 sql/02_consultas.sql      163         verificacion y exploracion desde DBeaver
 ```
@@ -178,8 +188,10 @@ el 51% del vocabulario aparece una sola vez y TF-IDF premia justamente esos tér
 
 ### 2. ¿Qué sesgo introduce que las sinopsis sean texto promocional?
 
-**Contradice la hipótesis obvia.** Solo el 1,5% de los términos característicos son
-vocabulario publicitario, y quitarlo del clasificador cambia el micro-F1 en **+0,005**.
+**Contradice la hipótesis obvia.** Solo el 0,8% de los términos característicos son
+vocabulario publicitario, y quitarlo del clasificador no cambia el micro-F1: **−0,000 ± 0,009**
+sobre 20 splits. (El "+0,005" anterior venía de un solo split y de una ablación con un bug:
+no quitaba las palabras con tilde.)
 
 La razón: TF-IDF ya penaliza esas palabras porque aparecen en *todas* las sinopsis y su IDF
 es bajo. El filtro ya estaba puesto por construcción.
@@ -204,9 +216,12 @@ géneros tienen menos de 5 libros: no se pueden aprender ni estratificar.
 
 ### 4. ¿Qué pasa con los libros en gallego o catalán?
 
-**Las 200 son castellano**, confianza mínima 0,998. La premisa no se cumple en la muestra.
+**Hay una sinopsis en gallego** (*Morning Star*, id 124205), y `lingua` la etiqueta como
+castellano con confianza 0,998, la mínima del corpus. La encuentra un segundo instrumento
+basado en marcadores léxicos del gallego. La versión anterior concluía "las 200 son
+castellano": era falso.
 
-Pero se verificó el instrumento con tres traducciones del mismo párrafo:
+Se verificó además el instrumento con tres traducciones del mismo párrafo:
 
 | entrada | detectado | confianza |
 |---|---|---|
@@ -225,7 +240,8 @@ Word2Vec y FastText sobre el corpus ampliado (118.962 tokens ya tokenizados), co
 SBW (1.400 millones de palabras, unas 10.000 veces más).
 
 Parámetros propios: `vector_size=100` (no 300: el corpus no sostiene tantas dimensiones),
-`window=5`, `min_count=3`, `sg=1` (skip-gram anda mejor en corpus chicos), `epochs=30`.
+`window=5`, `min_count=3`, `sg=1` (skip-gram anda mejor en corpus chicos), `epochs=30`,
+`workers=1` y `seed=42` (reproducible byte a byte; con `workers=4` no lo era).
 
 ### Los tres fallan distinto, y se midió
 
@@ -245,8 +261,9 @@ saga, usando la columna `serie` como *ground truth* gratis.
 | representación | MRR | acierto@1 |
 |---|---|---|
 | **TF-IDF (sin embeddings)** | **0,881** | **83,5%** |
-| word2vec propio | 0,787 | 68,4% |
-| fasttext propio | 0,696 | 58,2% |
+| SBERT distiluse (TP2) | 0,828 | 78,5% |
+| word2vec propio | 0,780 | 68,4% |
+| fasttext propio | 0,712 | 59,5% |
 | SBW pre-entrenado | 0,578 | 46,8% |
 
 **Gana TF-IDF y el SBW sale último.** Los libros de una saga comparten **nombres propios**,
@@ -259,8 +276,9 @@ generalizar destruye la señal.
 > se puede concluir sobre aquella. **No usar esta tabla para descartar embeddings en el
 > recomendador.**
 
-Ponderar por IDF **no mejora de forma uniforme**: sube FastText (+0,025), no cambia
-Word2Vec (−0,004), empeora el SBW (−0,018).
+Ponderar por IDF **no mejora de forma uniforme**: sube Word2Vec (+0,016), no cambia
+FastText (+0,004), empeora el SBW (−0,019). Con `workers=4` daba lo contrario para Word2Vec y
+FastText: era ruido de un entrenamiento no reproducible.
 
 ---
 
@@ -316,6 +334,11 @@ dato y no del teclado.**
 - El **SBW** (1,07 GB) vive **fuera del repositorio**, en la carpeta que lo contiene.
 - `venv/` (797 MB) y `data/modelos/` (777 MB) **no están en git**: el segundo tiene un
   archivo de 762 MB y GitHub rechaza todo lo que supere 100 MB. Ambos se regeneran.
+- **En la PC de Bautista, Windows Smart App Control bloquea DLLs** de scikit-learn
+  (`sklearn.metrics`), spaCy y, por arrastre, sentence-transformers. No es un bug del
+  proyecto y se decidió no desactivarlo. `preprocesamiento.py` lee la lista de stopwords sin
+  cargar spaCy para esquivarlo. Para ejecutar todo se usó un contenedor Docker
+  `python:3.12-slim`; la entrega se ejecuta en Colab.
 
 ---
 
@@ -339,9 +362,13 @@ Convenciones que ya están establecidas y conviene mantener:
 
 ## 11. Qué sigue
 
-1. **Decidir qué pasa con `main`**, que está 6 commits atrás y no tiene la Unidad 2.
-2. **Sacar el `.env` de la rama** antes de mergear a `main`. Acá no es grave (credenciales
-   locales de un TP) pero es mal hábito.
+0. **TP2: validar `queries_propuesta.json`** (con `docs/propuesta_queries.md`), generar
+   `queries.json`, re-ejecutar el notebook en Colab, escribir sus conclusiones y cerrar el
+   informe (`docs/informe_borrador.md` -> `informe.pdf`). Detalle en `docs/AUDITORIA_TP2.md`.
+1. **Decidir qué pasa con `main`**, que está varios commits atrás y no tiene la Unidad 2 ni
+   el TP2.
+2. ~~Sacar el `.env` de la rama~~ — hecho: se sacó del índice (`git rm --cached`) y ahora
+   lo cubre el `.gitignore`. Contenía solo los valores por defecto del Docker local.
 3. **Confirmar con el profesor** que los arrays JSON son lo que pidió cuando dijo "hacer una
    lista". El argumento del `::jsonb` está en el README.
 4. **Unidad 3: el recomendador.** Lo que ya está listo para eso: el corpus en Postgres, las
@@ -351,3 +378,49 @@ Convenciones que ya están establecidas y conviene mantener:
 Hay cosas que el profesor remarcó y conviene tener presentes: **escalabilidad** (el diseño
 tiene que poder crecer de 200 a 2M registros, y el README tiene una sección sobre eso) y
 **documentación** (que el README explique cómo proceder para correr el proyecto).
+
+---
+
+## 12. TP2: qué se hizo el 2026-10-07 y qué decisiones no hay que deshacer
+
+Se auditó todo lo existente contra la consigna del TP2, se corrigió lo que estaba mal y se
+implementó lo que faltaba. Informe completo en `docs/AUDITORIA_TP2.md`; pasos para
+continuar en `TRASPASO.md`.
+
+**Decisiones de método de la evaluación** (todas con tests en `tests/test_tp2.py`):
+
+- **precision@k con empates exactos.** TF-IDF da 0 a todo lo que no comparte palabras con
+  la consulta, y `argsort` ordenaría esos empates por posición en el CSV. Se usa la
+  precisión *esperada* bajo desempate aleatorio (hipergeométrica, sin semilla). Una consulta
+  sin palabras en común con el corpus da exactamente el piso. No reemplazar por un
+  `argsort` simple.
+- **Piso de azar exacto: |R|/N.** La simulación solo se usa para mostrar la dispersión.
+- **Se reportan techo y R-precision**, porque con 2 relevantes P@5 no pasa de 0,4.
+- **Promedio macro con bootstrap sobre consultas, y comparaciones pareadas.** Con 16
+  consultas, una diferencia de medias sin intervalo no dice nada.
+- **Los dudosos cuentan como no relevantes.** Se informa aparte la variante que sí los
+  cuenta.
+- **Cada modelo recibe su propio preprocesamiento:** tokenizado para TF-IDF y los
+  promedios, texto crudo para SBERT.
+- **TF-IDF de n-gramas de caracteres es un CONTROL, no la línea de base.** Sirve para
+  separar fallas de morfología (plurales) de fallas de semántica.
+- **El truncamiento de SBERT se cuenta con su tokenizador.** Es el 86 % de las sinopsis;
+  contando palabras se subestima. La variante por fragmentos mostró que, en esta tarea, el
+  truncamiento no cambia P@5.
+
+**Los juicios de relevancia** de `queries_propuesta.json` los propuso un asistente de IA,
+que leyó las 200 sinopsis antes de ejecutar ningún modelo. No se buscaron candidatos por
+palabras, porque eso favorecería a TF-IDF. Las tres consultas sin solapamiento se
+reformularon mirando **solo** el solapamiento léxico, nunca resultados. **Falta que el
+grupo las valide.** Después de validarlas no se tocan, salga lo que salga.
+
+**Errores encontrados en esta sesión, para no repetirlos** (mismo patrón que la sección 8:
+afirmaciones sin verificar):
+
+| Error | Cómo se vio |
+|---|---|
+| "Las 200 sinopsis son castellano" | Leyendo el corpus: *Morning Star* está en gallego; `lingua` la llama castellano con 0,998 |
+| Ablación promocional sin las palabras con tilde | Contando qué términos quitaba `stop_words` |
+| Una conclusión que cambiaba entre corridas (IDF en Word2Vec) | Al fijar `workers=1`, se invirtió |
+| "Estable" marcado en el piso de ruido y en el último punto por vacuidad | Comparando la tabla con su propia conclusión |
+| "Si se cuentan los dudosos, el orden no cambia" (escrito en el borrador del informe) | Contrastando cada cifra del informe con la salida: sí cambia |

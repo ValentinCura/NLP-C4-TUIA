@@ -21,3 +21,10 @@ data/*_parcial.jsonl
 # Modelos de embeddings entrenados: son artefactos regenerables con
 # `python src/embeddings.py entrenar` y pesan varios MB.
 data/modelos/
+
+# Salidas del notebook del TP2: embeddings guardados en disco y tabla de
+# resultados. Se regeneran al ejecutarlo; la evidencia es el notebook ejecutado.
+data/embeddings/
+data/figuras/
+data/resultados_evaluacion.csv
+data/similitudes_pares_aleatorios.csv

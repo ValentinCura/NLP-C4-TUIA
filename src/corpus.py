@@ -1,5 +1,5 @@
 """
-Acceso al corpus desde PostgreSQL.
+Acceso al corpus, desde el CSV o desde PostgreSQL.
 
 Unidad 2 - Procesamiento del Lenguaje Natural (TUIA, FCEIA-UNR).
 
@@ -8,16 +8,29 @@ corpus almacena. La version tokenizada no vive aca ni en la base: la produce
 preprocesamiento.py a demanda. El motivo esta explicado abajo, en la nota sobre
 por que Documento no tiene un campo `tokens`.
 
-    python src/corpus.py            resumen del corpus cargado
+La fuente por defecto es el CSV. La catedra aviso que para el TP2 no hace falta
+la conexion a Postgres ("por ahora desde el CSV"), y el notebook corre en Colab,
+donde no hay base. Postgres sigue disponible con fuente="postgres": las dos
+fuentes devuelven exactamente los mismos Documento, en el mismo orden.
+
+    python src/corpus.py                     resumen del corpus (desde el CSV)
+    python src/corpus.py --fuente postgres   lo mismo, desde la base
 """
 
 import argparse
+import json
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 
-from psycopg.rows import class_row
+RAIZ = Path(__file__).resolve().parent.parent
 
-import db
+# Cada "tabla" del corpus tiene su CSV. Se mantiene el nombre de tabla como
+# identificador para que el resto del codigo no cambie segun la fuente.
+CSV_POR_TABLA = {
+    "libros": RAIZ / "data" / "libros.csv",
+    "libros_ampliado": RAIZ / "data" / "libros_ampliado.csv",
+}
 
 # Columnas que se traen. El orden importa: tiene que coincidir con los campos de
 # Documento para que class_row los mapee.
@@ -87,8 +100,68 @@ class Documento:
 #     tokenizados = preprocesamiento.tokenizar_corpus(crudos)    -> TF-IDF
 
 
-def traer_documentos(generos=None, categorias=None, limite=None, tabla="libros"):
+def traer_documentos(generos=None, categorias=None, limite=None, tabla="libros",
+                     fuente="csv"):
     """Devuelve los documentos del corpus, ordenados por id.
+
+    fuente="csv" (default) lee data/<tabla>.csv; fuente="postgres" lee la base.
+    Los filtros y el orden son los mismos en las dos.
+    """
+    if fuente == "csv":
+        return _desde_csv(tabla, generos, categorias, limite)
+    if fuente != "postgres":
+        raise ValueError(f"fuente desconocida: {fuente!r} (csv o postgres)")
+    return _desde_postgres(generos, categorias, limite, tabla)
+
+
+def _desde_csv(tabla, generos=None, categorias=None, limite=None):
+    """Lee el CSV aplicando la MISMA traduccion que hace el ETL al cargar la base.
+
+    - autores, generos y categoria_origen: el CSV los trae como array JSON, se
+      parsean con json.loads (nunca partiendo por comas).
+    - serie y serie_num: '' en el CSV significa ausencia y se traduce a None,
+      igual que el NULLIF del ETL. Asi un Documento leido del CSV es identico al
+      leido de Postgres.
+    """
+    import csv
+
+    if tabla not in CSV_POR_TABLA:
+        raise ValueError(f"tabla desconocida: {tabla!r}. "
+                         f"Opciones: {sorted(CSV_POR_TABLA)}")
+    ruta = CSV_POR_TABLA[tabla]
+    if not ruta.exists():
+        raise FileNotFoundError(f"No existe {ruta}")
+
+    with ruta.open(encoding="utf-8", newline="") as archivo:
+        filas = list(csv.DictReader(archivo))
+
+    docs = []
+    for f in filas:
+        d = Documento(
+            id=int(f["id"]),
+            titulo=f["titulo"],
+            autores=json.loads(f["autores"]),
+            generos=json.loads(f["generos"]),
+            categoria_origen=json.loads(f["categoria_origen"]),
+            serie=f["serie"] or None,
+            serie_num=int(f["serie_num"]) if f["serie_num"] else None,
+            url_libro=f["url_libro"],
+            sinopsis=f["sinopsis"],
+        )
+        # Mismo criterio que el operador ?| de Postgres: alcanza con que el
+        # documento tenga CUALQUIERA de los valores pedidos.
+        if generos and not set(generos) & set(d.generos):
+            continue
+        if categorias and not set(categorias) & set(d.categoria_origen):
+            continue
+        docs.append(d)
+
+    docs.sort(key=lambda d: d.id)
+    return docs[:limite] if limite else docs
+
+
+def _desde_postgres(generos=None, categorias=None, limite=None, tabla="libros"):
+    """Devuelve los documentos desde PostgreSQL, ordenados por id.
 
     Se devuelve una LISTA y no un generador a proposito: el corpus se recorre
     varias veces (ajustar TF-IDF, despues entrenar embeddings, despues evaluar)
@@ -104,6 +177,10 @@ def traer_documentos(generos=None, categorias=None, limite=None, tabla="libros")
     El filtrado va en SQL y no en Python: es lo que le da sentido a haber
     guardado jsonb con indices GIN.
     """
+    # Imports diferidos: quien usa el CSV (Colab) no necesita psycopg instalado.
+    from psycopg.rows import class_row
+    import db
+
     condiciones, parametros = [], []
 
     if generos:
@@ -127,8 +204,13 @@ def traer_documentos(generos=None, categorias=None, limite=None, tabla="libros")
             return cur.fetchall()
 
 
-def traer_documento(id_libro, tabla="libros"):
+def traer_documento(id_libro, tabla="libros", fuente="csv"):
     """Devuelve un documento por su id, o None si no existe."""
+    if fuente == "csv":
+        return next((d for d in _desde_csv(tabla) if d.id == id_libro), None)
+
+    from psycopg.rows import class_row
+    import db
     with db.conectar() as conexion:
         with conexion.cursor(row_factory=class_row(Documento)) as cur:
             cur.execute(f"SELECT {CAMPOS} FROM {tabla} WHERE id = %s",
@@ -154,10 +236,11 @@ def main():
     parser.add_argument("--tabla", default="libros")
     parser.add_argument("--generos", nargs="+", default=None)
     parser.add_argument("--categorias", nargs="+", default=None)
+    parser.add_argument("--fuente", choices=["csv", "postgres"], default="csv")
     args = parser.parse_args()
 
     docs = traer_documentos(generos=args.generos, categorias=args.categorias,
-                            tabla=args.tabla)
+                            tabla=args.tabla, fuente=args.fuente)
     if not docs:
         raise SystemExit("El corpus esta vacio. Corriste src/etl.py?")
 

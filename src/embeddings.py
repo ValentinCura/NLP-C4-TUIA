@@ -19,6 +19,7 @@ QUE TIPO de error comete cada uno.
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -34,7 +35,11 @@ DIR_MODELOS = RAIZ / "data" / "modelos"
 # El SBW pesa mas de 1 GB comprimido, asi que vive FUERA del repositorio, en la
 # carpeta que lo contiene. Si no esta, el modulo lo dice y sigue funcionando con
 # los modelos propios en vez de reventar.
-RUTA_SBW = RAIZ.parent / "SBW-vectors-300-min5.bin.gz"
+#
+# La variable de entorno SBW_PATH permite ubicarlo en otro lado (en Colab, por
+# ejemplo, se descarga a /content).
+RUTA_SBW = Path(os.environ.get("SBW_PATH",
+                               RAIZ.parent / "SBW-vectors-300-min5.bin.gz"))
 
 # Cuantas palabras del SBW se cargan en memoria.
 #
@@ -54,7 +59,7 @@ PARAMETROS = {
     "min_count": 3,
     "sg": 1,
     "epochs": 30,
-    "workers": 4,
+    "workers": 1,
     "seed": 42,
 }
 
@@ -123,12 +128,13 @@ def entrenar(tabla="libros_ampliado", guardar=True):
         vectores converjan. Con 255.000 tokens sigue siendo cuestion de
         segundos.
 
-    seed=42 y workers=4
-        Ojo con esto: con varios workers el entrenamiento NO es completamente
-        reproducible aunque se fije la semilla, porque el orden en que los hilos
-        actualizan los pesos varia. Para reproducibilidad exacta habria que usar
-        workers=1. Se elige velocidad y se deja dicho, que es mejor que
-        prometer un determinismo que no se cumple.
+    seed=42 y workers=1
+        Con varios workers el entrenamiento NO es reproducible aunque se fije
+        la semilla, porque el orden en que los hilos actualizan los pesos
+        varia. Con workers=1 si lo es, y con este corpus cuesta segundos. La
+        evaluacion compara modelos con diferencias de centesimos, asi que un
+        modelo que cambia en cada corrida no sirve para sostener conclusiones.
+        (La version anterior usaba workers=4; se cambio por eso.)
     """
     from gensim.models import FastText, Word2Vec
 
@@ -347,6 +353,17 @@ def vector_promedio(tokens, kv, pesos=None):
     sofisticada.
 
     El parametro pesos permite la variante ponderada por IDF.
+
+    VECTOR NULO, a proposito: si ninguna palabra del texto esta en el
+    vocabulario del modelo (una consulta con una sola palabra rara, una
+    sinopsis en otro idioma), no hay nada que promediar y se devuelve el vector
+    de ceros. No se inventa un vector "neutro" ni se devuelve NaN (que es lo
+    que daria un np.mean sobre una lista vacia). El cero tiene una semantica
+    clara: similitud coseno 0 con todo, o sea "no se sabe nada de este texto".
+    Quien arma la matriz tiene que CONTARLOS y no normalizarlos: ver
+    vectores.normalizar_l2(), que los deja en cero en vez de dividir por cero.
+
+    Siempre devuelve float32, el tipo de los vectores de gensim.
     """
     import numpy as np
 
@@ -358,7 +375,8 @@ def vector_promedio(tokens, kv, pesos=None):
 
     if not vectores:
         return np.zeros(kv.vector_size, dtype=np.float32)
-    return np.average(np.array(vectores), axis=0, weights=np.array(w))
+    return np.average(np.array(vectores), axis=0,
+                      weights=np.array(w)).astype(np.float32)
 
 
 def comparar_documentos(tabla="libros", modelo_tabla="libros_ampliado"):

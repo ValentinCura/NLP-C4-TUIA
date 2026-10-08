@@ -115,24 +115,74 @@ def experimento_idioma(docs):
 
     _control_positivo(detector)
 
+    # Segundo instrumento, independiente del detector: marcadores lexicos del
+    # gallego. El detector no puede decir "gallego" porque no tiene ese modelo,
+    # asi que su silencio no prueba nada. Hay que buscarlo de otra forma.
+    gallegos = _buscar_gallego(docs)
+    etiqueta_lingua = {r[0].id: (r[1].language.name, r[1].value)
+                       for r in resultados}
+
+    print(f"\nSEGUNDO INSTRUMENTO: marcadores lexicos del gallego")
+    print(f"  Palabras funcionales que existen en gallego y no en castellano")
+    print(f"  ({', '.join(sorted(MARCADORES_GALLEGO)[:10])}...). Se marca una")
+    print(f"  sinopsis si aparecen {MINIMO_MARCADORES} o mas marcadores distintos.")
+    print(f"  Sinopsis marcadas: {len(gallegos)}")
+    for d, encontrados in gallegos:
+        idioma, confianza = etiqueta_lingua[d.id]
+        print(f"  [{d.id}] {d.titulo}: marcadores {sorted(encontrados)}")
+        print(f"      lingua dijo {idioma} con confianza {confianza:.3f}")
+        print(f"      {d.sinopsis[:110]}...")
+
     print(f"\nCONCLUSION")
-    if not no_castellano:
-        print(f"  En ESTE corpus el problema no se presenta: las {len(docs)}")
-        print(f"  sinopsis son castellano, con confianza minima {confianzas[0]:.3f}.")
-        print(f"  La premisa de la pregunta no se cumple en nuestra muestra, y")
-        print(f"  decirlo es mas util que inventar un problema que no tenemos.")
-    print(f"\n  Pero el control de arriba muestra que eso NO significa que")
-    print(f"  detectar el idioma sea innecesario:")
-    print(f"    - el catalan se detecta bien, asi que si hubiera libros en")
-    print(f"      catalan los encontrariamos;")
-    print(f"    - el gallego NO tiene modelo y se reporta como otra lengua con")
-    print(f"      alta confianza. Un falso negativo silencioso: el peor caso,")
-    print(f"      porque no se distingue de un acierto.")
-    print(f"  Conclusion operativa: detectar antes de tokenizar si, pero sin")
-    print(f"  confiar en la etiqueta cuando las lenguas candidatas son")
-    print(f"  cercanas y alguna no esta en el repertorio del detector.")
+    falsos_negativos = [d for d, _ in gallegos
+                        if etiqueta_lingua[d.id][0] == "SPANISH"]
+    if no_castellano:
+        print(f"  El detector encontro {len(no_castellano)} sinopsis que no son")
+        print(f"  castellano.")
+    else:
+        print(f"  Segun lingua, las {len(docs)} sinopsis son castellano (confianza")
+        print(f"  minima {confianzas[0]:.3f}).")
+    if falsos_negativos:
+        print(f"\n  PERO NO ES CIERTO: los marcadores encuentran "
+              f"{len(falsos_negativos)} sinopsis en")
+        print(f"  gallego que lingua etiqueto como castellano con confianza alta.")
+        print(f"  Es el falso negativo silencioso que el control de arriba")
+        print(f"  anticipaba, y no es hipotetico: esta en nuestro corpus. La")
+        print(f"  confianza no lo delata: es alta igual.")
+        print(f"\n  Consecuencia para el pipeline: esa sinopsis se tokeniza con")
+        print(f"  stopwords del castellano, que no filtran 'unha', 'dun', 'coa'...")
+        print(f"  Para TF-IDF esas palabras son rarisimas en el corpus, asi que")
+        print(f"  reciben IDF ALTO y pasan a ser 'terminos caracteristicos'.")
+    print(f"\n  Conclusion operativa: detectar el idioma antes de tokenizar si,")
+    print(f"  pero sin confiar solo en la etiqueta del detector cuando las")
+    print(f"  lenguas posibles son cercanas y alguna no esta en su repertorio.")
+    print(f"  Con un corpus chico, una heuristica de marcadores es un control")
+    print(f"  barato que encontro lo que el detector no podia ver.")
 
     return resultados
+
+
+# Palabras funcionales del gallego que no son palabras del castellano. Solo se
+# usan formas sin ambiguedad: 'non' o 'a' quedan afuera porque aparecen en
+# castellano (latinismos, preposicion).
+MARCADORES_GALLEGO = {
+    "unha", "unhas", "dunha", "dunhas", "nunha", "nunhas", "cunha", "dun",
+    "nun", "cun", "coa", "coas", "cos", "polo", "pola", "polos", "polas",
+    "moi", "tamén", "aínda", "xa", "ollo", "xente", "facer", "dous",
+}
+MINIMO_MARCADORES = 3
+
+
+def _buscar_gallego(docs):
+    """Devuelve [(doc, marcadores encontrados)] para las sinopsis en gallego."""
+    import re
+    encontrados = []
+    for d in docs:
+        palabras = set(re.findall(r"\w+", d.sinopsis.lower()))
+        marcas = palabras & MARCADORES_GALLEGO
+        if len(marcas) >= MINIMO_MARCADORES:
+            encontrados.append((d, marcas))
+    return encontrados
 
 
 def _control_positivo(detector):
@@ -265,12 +315,7 @@ def experimento_estabilidad(docs, semilla=42):
                                    if fila[j] > 0]
         return resultado
 
-    print(f"\n{'fondo':>7} {'Jaccard@10':>12} {'Jaccard@3':>11} "
-          f"{'estable?':>10} {'solape':>9}")
-    print("  " + "-" * 54)
-
     curva = []
-    anterior = None
     for n in TAMANOS:
         # Se descartan los tamanos que no entran en el corpus disponible.
         if n > len(fondo_disponible):
@@ -287,22 +332,33 @@ def experimento_estabilidad(docs, semilla=42):
                 j10.append(_jaccard(set(ta), set(tb)))
                 j3.append(_jaccard(set(ta[:3]), set(tb[:3])))
 
-        media10 = sum(j10) / len(j10)
-        media3 = sum(j3) / len(j3)
-        salto = "" if anterior is None else f"{media10 - anterior:+.3f}"
-        meseta = (anterior is not None
-                  and 0 <= media10 - anterior < UMBRAL_MESETA)
+        curva.append((n, sum(j10) / len(j10), sum(j3) / len(j3)))
+
+    # "Estable desde n" exige que la ganancia marginal quede bajo el umbral
+    # desde el salto que LLEGA a n hasta el final, no solo en un salto suelto.
+    # Un tramo plano al principio no es estabilidad: es la curva en el piso de
+    # ruido (con 10 o 25 documentos de fondo TF-IDF no distingue casi nada), y
+    # marcarlo "estable" contradice la conclusion de abajo. Se incluye el salto
+    # de llegada para que el ultimo punto no quede "estable" por vacuidad, sin
+    # ningun salto posterior que lo respalde.
+    saltos = [curva[i][1] - curva[i - 1][1] for i in range(1, len(curva))]
+    estable_desde = [i > 0 and all(0 <= s < UMBRAL_MESETA for s in saltos[i - 1:])
+                     for i in range(len(curva))]
+
+    print(f"\n{'fondo':>7} {'Jaccard@10':>12} {'Jaccard@3':>11} "
+          f"{'estable?':>10} {'solape':>9}")
+    print("  " + "-" * 54)
+    for i, (n, media10, media3) in enumerate(curva):
+        salto = "" if i == 0 else f"{saltos[i - 1]:+.3f}"
         # Cuanto se solapan dos replicas del mismo tamano. Al muestrear sin
         # reposicion de un conjunto finito, cuando n se acerca al total las
         # replicas comparten casi todos los documentos y el Jaccard sube por
         # esa razon y no porque TF-IDF se haya estabilizado. Reportarlo evita
         # leer como senal lo que es un artefacto del diseno.
         solape = n / len(fondo_disponible)
+        marca = "SI" if estable_desde[i] else "no"
         print(f"{n:>7} {media10:>12.3f} {media3:>11.3f} "
-              f"{'SI' if meseta else 'no':>10} {solape:>8.0%}   {salto}")
-
-        curva.append((n, media10, media3))
-        anterior = media10
+              f"{marca:>10} {solape:>8.0%}   {salto}")
 
     print(f"\nLECTURA DEL RESULTADO")
     inicial, final = curva[0][1], curva[-1][1]
@@ -517,6 +573,10 @@ LEXICO_PROMOCIONAL = {
     "autora", "autor", "novela", "saga", "trilogia", "edicion", "traduccion",
 }
 
+# Cuantos splits train/test distintos se usan para medir el efecto de quitar el
+# vocabulario promocional. Con un solo split de 60 libros la diferencia es ruido.
+REPETICIONES_SPLIT = 20
+
 
 def experimento_promocional(docs, semilla=42):
     """Mide cuanto pesa el vocabulario publicitario y si predice el genero.
@@ -607,26 +667,63 @@ def experimento_promocional(docs, semilla=42):
     Y = mlb.fit_transform([[g for g in gs if g in frecuentes]
                            for gs in etiquetas])
 
-    resultados = {}
-    for nombre, stop in [("con vocabulario promocional", None),
-                         ("sin vocabulario promocional",
-                          sorted(LEXICO_PROMOCIONAL))]:
-        X_tr, X_te, Y_tr, Y_te = train_test_split(
-            textos, Y, test_size=0.3, random_state=semilla)
-        v = TfidfVectorizer(min_df=2, stop_words=stop)
-        modelo = OneVsRestClassifier(
-            LogisticRegression(max_iter=1000, class_weight="balanced"))
-        modelo.fit(v.fit_transform(X_tr), Y_tr)
-        pred = modelo.predict(v.transform(X_te))
-        resultados[nombre] = (
-            f1_score(Y_te, pred, average="micro", zero_division=0),
-            f1_score(Y_te, pred, average="macro", zero_division=0))
-        print(f"   {nombre:<32} f1 micro {resultados[nombre][0]:.3f}  "
-              f"f1 macro {resultados[nombre][1]:.3f}")
+    # La lista a quitar son las formas que REALMENTE aparecen en el vocabulario,
+    # con sus tildes. LEXICO_PROMOCIONAL esta escrito sin tildes y los tokens
+    # las conservan (quitar_acentos=False), asi que pasarlo tal cual como
+    # stop_words dejaba adentro 'edición', 'éxito', 'clásico', 'jamás'... Era
+    # un bug: la ablacion quitaba solo una parte del vocabulario que decia
+    # quitar. es_promocional() ya compara sin tildes; se reutiliza.
+    a_quitar = sorted(t for t in vocabulario if es_promocional(t))
+    con_tilde = [t for t in a_quitar if t not in LEXICO_PROMOCIONAL]
+    print(f"   Se quitan {len(a_quitar)} terminos del vocabulario "
+          f"({len(con_tilde)} con tilde, p. ej. {con_tilde[:4]}).")
 
-    caida = (resultados["con vocabulario promocional"][0]
-             - resultados["sin vocabulario promocional"][0])
-    print(f"\n   Diferencia en f1 micro: {caida:+.3f}")
+    # Un unico split de 60 libros de prueba es demasiado ruidoso para afirmar
+    # que una diferencia de centesimos "no cambia nada". Se repite el mismo
+    # experimento con varios splits y se reporta la diferencia PAREADA (mismo
+    # split, con y sin el vocabulario), con su media y su desvio.
+    diferencias, resultados = [], {"con": [], "sin": []}
+    for rep in range(REPETICIONES_SPLIT):
+        X_tr, X_te, Y_tr, Y_te = train_test_split(
+            textos, Y, test_size=0.3, random_state=semilla + rep)
+        f1 = {}
+        for nombre, stop in [("con", None), ("sin", a_quitar)]:
+            v = TfidfVectorizer(min_df=2, stop_words=stop)
+            modelo = OneVsRestClassifier(
+                LogisticRegression(max_iter=1000, class_weight="balanced"))
+            modelo.fit(v.fit_transform(X_tr), Y_tr)
+            pred = modelo.predict(v.transform(X_te))
+            f1[nombre] = (
+                f1_score(Y_te, pred, average="micro", zero_division=0),
+                f1_score(Y_te, pred, average="macro", zero_division=0))
+            resultados[nombre].append(f1[nombre])
+        diferencias.append(f1["con"][0] - f1["sin"][0])
+
+    for nombre, etiqueta in [("con", "con vocabulario promocional"),
+                             ("sin", "sin vocabulario promocional")]:
+        micro = np.array([r[0] for r in resultados[nombre]])
+        macro = np.array([r[1] for r in resultados[nombre]])
+        print(f"   {etiqueta:<32} f1 micro {micro.mean():.3f} (+-{micro.std():.3f})"
+              f"  f1 macro {macro.mean():.3f} (+-{macro.std():.3f})")
+
+    diferencias = np.array(diferencias)
+    caida = float(diferencias.mean())
+    print(f"\n   Diferencia pareada en f1 micro (con - sin), "
+          f"{REPETICIONES_SPLIT} splits:")
+    print(f"     media {caida:+.3f} | desvio {diferencias.std():.3f} | "
+          f"rango [{diferencias.min():+.3f}, {diferencias.max():+.3f}]")
+    print(f"     el vocabulario promocional ayuda en "
+          f"{int((diferencias > 0).sum())} splits, perjudica en "
+          f"{int((diferencias < 0).sum())} y empata en "
+          f"{int((diferencias == 0).sum())}")
+    # La lectura se calcula de los numeros, no se escribe de antemano.
+    if abs(caida) < diferencias.std():
+        print(f"   La diferencia media es menor que su propio desvio entre")
+        print(f"   splits: con 200 libros no se puede distinguir de cero.")
+    else:
+        signo = "empeora" if caida > 0 else "mejora"
+        print(f"   Quitar el vocabulario promocional {signo} el clasificador")
+        print(f"   de forma consistente entre splits.")
 
     print(f"\nRESPUESTA A LA PREGUNTA")
     print(f"  El sesgo existe pero no es el que uno esperaria. Las palabras")

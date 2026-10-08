@@ -54,13 +54,42 @@ import re
 import sys
 import unicodedata
 
-from spacy.lang.es.stop_words import STOP_WORDS
 
-# Las stopwords salen de spacy.lang.es y no de nltk porque estan disponibles con
-# solo hacer pip install spacy, sin descargar ningun modelo. nltk obligaria a un
-# nltk.download('stopwords') en tiempo de ejecucion, o sea a tener red: fragil
-# para el companero que replica el trabajo en otra maquina.
-STOPWORDS = set(STOP_WORDS)
+def _cargar_stopwords():
+    """Devuelve la lista de stopwords del castellano de spaCy.
+
+    Las stopwords salen de spacy.lang.es y no de nltk porque estan disponibles
+    con solo hacer pip install spacy, sin descargar ningun modelo. nltk obligaria
+    a un nltk.download('stopwords') en tiempo de ejecucion, o sea a tener red:
+    fragil para el companero que replica el trabajo en otra maquina.
+
+    El camino alternativo existe por un problema real: importar
+    spacy.lang.es.stop_words ejecuta primero spacy/__init__.py, que carga las
+    extensiones compiladas del paquete. En una PC con Windows Smart App Control
+    activo esas DLL estan bloqueadas y el import falla, aunque lo unico que se
+    necesita es una lista de palabras en un .py de texto plano. En ese caso se
+    lee ESE MISMO archivo sin ejecutar el resto de spaCy: la lista es identica,
+    asi que los resultados no cambian.
+    """
+    try:
+        from spacy.lang.es.stop_words import STOP_WORDS
+        return set(STOP_WORDS)
+    except ImportError:
+        import importlib.util
+        from pathlib import Path
+
+        # find_spec de un paquete de primer nivel lo UBICA sin ejecutarlo.
+        spec_spacy = importlib.util.find_spec("spacy")
+        if spec_spacy is None:
+            raise
+        ruta = Path(spec_spacy.origin).parent / "lang" / "es" / "stop_words.py"
+        spec = importlib.util.spec_from_file_location("_stopwords_es", ruta)
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+        return set(modulo.STOP_WORDS)
+
+
+STOPWORDS = _cargar_stopwords()
 
 # Se tokeniza con expresion regular y no con el tokenizador estadistico de
 # spaCy. La razon es honesta: para bag-of-words, partir por caracteres de

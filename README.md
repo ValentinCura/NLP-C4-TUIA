@@ -5,6 +5,42 @@ Corpus de sinopsis de libros construido a partir de la informacion publica de
 
 - **Unidad 1** — Extraccion de metadatos y sinopsis con Playwright y BeautifulSoup.
 - **Unidad 2** — Carga a PostgreSQL, analisis TF-IDF y embeddings de palabras.
+- **TP2** — Embeddings y búsqueda semántica: Word2Vec propio contra SBW, SBERT y una
+  evaluación con consultas propias, precision@k y piso de azar. Ver [TP2](#tp2--embeddings-y-búsqueda-semántica).
+
+## TP2 — Embeddings y búsqueda semántica
+
+| Entregable | Archivo | Estado |
+|---|---|---|
+| Notebook ejecutado | [`TP2_Beltramo_Cortinas_Cura_Maragliano.ipynb`](TP2_Beltramo_Cortinas_Cura_Maragliano.ipynb) | ejecutado de punta a punta; **números provisionales** hasta validar las consultas |
+| Conjunto de evaluación | `queries.json` | **pendiente**: hoy existe la propuesta [`queries_propuesta.json`](queries_propuesta.json), a validar por el grupo con [`docs/propuesta_queries.md`](docs/propuesta_queries.md) |
+| Informe (≤ 3 páginas) | `informe.pdf` | **pendiente**: borrador en [`docs/informe_borrador.md`](docs/informe_borrador.md) |
+| Base en Supabase | — | **no corresponde**: la cátedra avisó que el TP2 no requiere Postgres; se trabaja desde el CSV |
+
+**Cómo ejecutarlo.** En Colab: abrir el notebook y ejecutar todo. La primera celda clona este
+repositorio, instala gensim y lingua y descarga el SBW (1,1 GB). En una máquina propia:
+instalar `requirements.txt` y ejecutar el notebook desde la raíz del repositorio. Si el SBW no
+está en la carpeta que contiene al repositorio, se descarga solo, o se puede indicar su ruta
+con la variable `SBW_PATH`.
+
+**Dónde está cada cosa.** El notebook narra y muestra. La lógica está en módulos con tests:
+
+| Módulo | Qué hace |
+|---|---|
+| `src/corpus.py` | trae los documentos, del CSV (por defecto) o de Postgres |
+| `src/preprocesamiento.py` | la tokenización de TF-IDF y de los promedios de palabras |
+| `src/embeddings.py` | Word2Vec/FastText propios, SBW, vecinos, promedio de vectores |
+| `src/vectores.py` | validación (dimensión, NaN, infinitos, nulos), normalización L2, coseno |
+| `src/busqueda.py` | las representaciones (TF-IDF, promedios, SBERT) con una interfaz común, y el truncamiento de SBERT |
+| `src/evaluacion.py` | `queries.json`, precision@k con empates, piso de azar, bootstrap, comparación pareada |
+| `tests/test_tp2.py` | 35 tests, varios adversariales (empates, k fuera de rango, NaN, consulta vacía, palabras desconocidas) |
+
+```bash
+python tests/test_tp2.py
+```
+
+> `pytest tests/test_tp2.py` también funciona. **No** correr `pytest tests/`: el viejo
+> `test_parsers.py` es un script que hace `sys.exit()` al importarse.
 
 ## Integrantes del grupo
 
@@ -243,7 +279,7 @@ archivo.
 | `python src/etl.py` | Carga el CSV a PostgreSQL y verifica la carga |
 | `python src/etl.py --recrear` | Borra la tabla y la vuelve a crear desde cero |
 | `python src/etl.py --solo-verificar` | Corre los controles sin cargar nada |
-| `python src/corpus.py` | Resumen del corpus leído desde la base |
+| `python src/corpus.py` | Resumen del corpus, leído del CSV (`--fuente postgres` para leerlo de la base) |
 | `python src/preprocesamiento.py --demo` | Muestra las dos versiones del texto lado a lado |
 
 ### Los experimentos
@@ -304,11 +340,13 @@ documentos medidos, se mezclarían dos fuentes de variación.
 
 | fondo | Jaccard@10 | solape entre réplicas |
 |---|---|---|
-| 10 | 0,233 | 1% |
-| 100 | 0,289 | 6% |
+| 10 | 0,230 | 1% |
+| 100 | 0,284 | 6% |
 | 300 | 0,371 | 18% |
-| 600 | 0,445 | 36% |
-| 1200 | 0,622 | 71% |
+| 600 | 0,444 | 36% |
+| 1200 | 0,620 | 71% |
+
+(Corrida sobre el corpus ampliado, `--tabla libros_ampliado`.)
 
 **La curva no se aplana**: el último salto es el más grande. Con 1700 documentos todavía no
 alcanza. La causa es que el **51% del vocabulario aparece una sola vez**, y TF-IDF premia
@@ -321,9 +359,15 @@ documentos y el Jaccard sube por esa razón y no porque haya convergencia.
 
 ### 2. ¿Qué sesgo introduce el texto promocional?
 
-**El resultado contradice la hipótesis obvia.** Solo el **1,5%** de los términos
-característicos son vocabulario publicitario, y quitarlo del clasificador cambia el
-micro-F1 en **+0,005**, o sea nada.
+**El resultado contradice la hipótesis obvia.** Solo el **0,8%** de los términos
+característicos (16 de 2000) son vocabulario publicitario. Quitarlo del clasificador no
+cambia el micro-F1: sobre 20 splits distintos, la diferencia pareada es **−0,000 ± 0,009**,
+y el vocabulario ayuda en 9 splits y perjudica en 10.
+
+> Una versión anterior informaba "+0,005" sobre un solo split, y además tenía un bug: la
+> lista promocional está escrita sin tildes y los tokens las conservan, así que la ablación
+> no quitaba `edición`, `éxito`, `clásico`, `jamás`… (11 de 37 términos, 24% de las
+> apariciones). Corregido; la conclusión cualitativa se mantiene, pero ahora está medida.
 
 La razón: TF-IDF ya penaliza esas palabras, porque aparecen en *todas* las sinopsis y su
 IDF es bajo. El filtro ya estaba puesto por construcción.
@@ -335,7 +379,7 @@ trata *la campaña*, y no generalizaría a reseñas ni al texto del libro.
 
 ### 3. ¿Cómo cambia la evaluación en multi-etiqueta?
 
-Ningún libro del corpus tiene un solo género (mínimo 2, promedio 2,84), así que el problema
+Ningún libro del corpus tiene un solo género (mínimo 2, promedio 2,83), así que el problema
 es multi-etiqueta **por construcción**, no por elección.
 
 | métrica | clasificador | trivial |
@@ -358,11 +402,18 @@ estratificar en un split.
 
 ### 4. ¿Qué pasa con los libros en gallego o catalán?
 
-**Las 200 sinopsis son castellano**, con confianza mínima 0,998. La premisa no se cumple en
-nuestra muestra.
+**Hay un libro en gallego en el corpus, y el detector no lo ve.** Según `lingua`, las 200
+sinopsis son castellano (confianza mínima 0,998). Pero un segundo instrumento, que busca
+palabras funcionales que solo existen en gallego (*unha*, *dunha*, *dun*, *dous*…), encuentra
+una: *Morning Star* (id 124205). `lingua` la etiquetó como **castellano con confianza
+0,998**, justamente la mínima del corpus. Como sus stopwords no se filtran, sus dos términos
+TF-IDF de mayor peso son *dun* y *dunha*.
 
-Pero decir "no encontramos ninguno" no significa nada si el instrumento no puede
-encontrarlos, así que se verificó con tres traducciones del mismo párrafo:
+> Una versión anterior concluía "las 200 son castellano, la premisa no se cumple". Era
+> falso, y el propio experimento anticipaba por qué.
+
+Decir "no encontramos ninguno" no significa nada si el instrumento no puede encontrarlos.
+Por eso se verificó con tres traducciones del mismo párrafo:
 
 | lengua de entrada | detectado | confianza |
 |---|---|---|
@@ -370,9 +421,9 @@ encontrarlos, así que se verificó con tres traducciones del mismo párrafo:
 | catalán | CATALAN | 1,00 |
 | **gallego** | **PORTUGUESE** | **0,91** |
 
-**`lingua` no tiene modelo de gallego.** Lo reporta como portugués con alta confianza: un
-falso negativo silencioso, que es el peor caso porque no se distingue de un acierto. El
-catalán sí se detecta bien.
+**`lingua` no tiene modelo de gallego.** Lo reporta como otra lengua con alta confianza
+(portugués en el control, castellano en el corpus real): un falso negativo silencioso, que
+es el peor caso porque no se distingue de un acierto. El catalán sí se detecta bien.
 
 Conclusión operativa: detectar el idioma antes de tokenizar sí, pero sin confiar en la
 etiqueta cuando las lenguas candidatas son cercanas y alguna no está en el repertorio del
@@ -382,35 +433,38 @@ detector.
 
 ## Embeddings: propio contra pre-entrenado
 
-Se entrenaron Word2Vec y FastText sobre el corpus ampliado (255.120 tokens) y se compararon
-contra el SBW (1.400 millones de palabras, unas 5000 veces más).
+Se entrenaron Word2Vec y FastText sobre el corpus ampliado (118.962 tokens después de
+tokenizar; 255.120 palabras crudas) y se compararon contra el SBW (1.400 millones de
+palabras, unas 10.000 veces más).
 
 **Parámetros del modelo propio y por qué:**
 
 | Parámetro | Valor | Razón |
 |---|---|---|
-| `vector_size` | 100 | El SBW usa 300 porque tiene datos para estimarlas. Con 255k tokens, las dimensiones de más modelan ruido |
+| `vector_size` | 100 | El SBW usa 300 porque tiene datos para estimarlas. Con 119k tokens, las dimensiones de más modelan ruido |
 | `window` | 5 | Punto medio entre relaciones sintácticas (2–3) y temáticas (10) |
 | `min_count` | 3 | El default de 5 descartaría demasiado en un corpus chico |
 | `sg` | 1 (skip-gram) | Anda mejor que CBOW en corpus chicos y con palabras poco frecuentes |
 | `epochs` | 30 | El default de 5 asume un corpus grande. Con pocos datos convienen más pasadas |
 
-> Con `workers=4` el entrenamiento **no** es del todo reproducible aunque se fije la
-> semilla, porque el orden en que los hilos actualizan los pesos varía. Para
-> reproducibilidad exacta habría que usar `workers=1`.
+> Se entrena con `workers=1` y `seed=42`: así el entrenamiento es **reproducible byte a
+> byte** (verificado comparando el hash de los vectores de dos procesos distintos). Con
+> varios hilos no lo es, porque el orden en que los hilos actualizan los pesos varía. Una
+> versión anterior usaba `workers=4`, y una de sus conclusiones (sobre ponderar por IDF) se
+> invirtió al volver reproducible el entrenamiento.
 
 ### Vecinos más cercanos
 
 ```
 'magia'
-  word2vec propio      ivy 0.64, mensual 0.57, waxillium 0.56, zach 0.53
-  fasttext propio      mafia 0.70, maga 0.69, mago 0.67, magos 0.60
+  word2vec propio      ivy 0.63, mensual 0.57, envolvente 0.56, amora 0.55
+  fasttext propio      maga 0.70, mafia 0.69, mago 0.65, ivy 0.62
   SBW pre-entrenado    mágico 0.70, mago 0.70, hechizos 0.69, mágicas 0.69
 
 'vampiro'
-  word2vec propio      sarren 0.65, rodrigo 0.60, beber 0.59, creador 0.59
-  fasttext propio      vampira 0.85, vampirismo 0.84, vampiros 0.82, zafiro 0.62
-  SBW pre-entrenado    vampiros 0.80, vampira 0.74, Drácula 0.74, licántropo 0.73
+  word2vec propio      sarren 0.66, creador 0.62, ewers 0.58, recrean 0.58
+  fasttext propio      vampira 0.87, vampirismo 0.85, vampiros 0.82, zorro 0.64
+  SBW pre-entrenado    vampiros 0.80, vampira 0.74, Drácula 0.74, vampiresa 0.73
 ```
 
 Los tres fallan **distinto**, y eso se puede medir. Contando qué fracción de los vecinos
@@ -418,8 +472,8 @@ comparte las primeras 4 letras con la palabra consultada:
 
 | modelo | vecinos por forma | qué significa |
 |---|---|---|
-| word2vec propio | **1%** | Responde a coocurrencia. Pero sus vecinos son nombres de personajes (`waxillium`, `sarren`): está memorizando libros concretos, no aprendiendo significado |
-| fasttext propio | **38%** | Responde a la forma escrita. Los n-gramas ayudan con palabras raras (`vampirismo`) pero producen falsos amigos: `magia`→`mafia`, `muerte`→`suerte` |
+| word2vec propio | **1%** | Responde a coocurrencia. Pero sus vecinos son nombres de personajes (`sarren`, `ewers`): está memorizando libros concretos, no aprendiendo significado |
+| fasttext propio | **39%** | Responde a la forma escrita. Los n-gramas ayudan con palabras raras (`vampirismo`) pero producen falsos amigos: `magia`→`mafia`, `muerte`→`suerte` |
 | SBW pre-entrenado | **18%** | Responde al significado. Ese 18% son variantes legítimas (`mago`/`magos`) |
 
 ### Vector de documento
@@ -431,9 +485,14 @@ truth* que no hubo que anotar a mano.
 | representación | MRR | acierto@1 |
 |---|---|---|
 | **TF-IDF (sin embeddings)** | **0,881** | **83,5%** |
-| word2vec propio, promedio | 0,787 | 68,4% |
-| fasttext propio, promedio | 0,696 | 58,2% |
+| word2vec propio, promedio | 0,780 | 68,4% |
+| fasttext propio, promedio | 0,712 | 59,5% |
 | SBW pre-entrenado, promedio | 0,578 | 46,8% |
+
+Dos advertencias: los modelos propios vieron estos 200 libros al entrenar (el corpus
+ampliado los contiene), y dos tomos de Norby tienen la sinopsis idéntica por un error del
+sitio, un par que cualquier representación encuentra en el primer puesto. En el notebook del
+TP2 se agrega SBERT a esta tabla: MRR 0,828, por debajo de TF-IDF.
 
 **Gana TF-IDF y el SBW sale último**, que es lo contrario de lo esperado. La explicación
 está en qué pide la tarea: los libros de una saga comparten **nombres propios**, que son
@@ -459,9 +518,8 @@ similitud 1,0):
 Se usa igual porque no requiere entrenamiento, es O(n), no tiene hiperparámetros y es la
 línea base honesta contra la cual medir algo más sofisticado.
 
-Ponderar por IDF **no mejora de forma uniforme**: sube el MRR de FastText (+0,025), no
-cambia el de Word2Vec (−0,004) y empeora el del SBW (−0,018). Ayuda cuando el modelo de
-palabras es pobre y necesita que le indiquen dónde mirar.
+Ponderar por IDF **no mejora de forma uniforme**: sube el MRR de Word2Vec (+0,016), no
+cambia el de FastText (+0,004) y empeora el del SBW (−0,019).
 
 ---
 
@@ -664,18 +722,23 @@ y por lo tanto paralelizables sin cambiarles una línea.
 
 ```
 README.md                       este archivo
+TP2_Beltramo_Cortinas_Cura_Maragliano.ipynb   TP2: notebook ejecutado
+queries_propuesta.json          TP2: consultas PROVISIONALES (-> queries.json al validar)
 requirements.txt                dependencias de Python
-docker-compose.yml              PostgreSQL 17 en Docker
-.env.example                    plantilla de conexión (copiar a .env)
+docker-compose.yml              PostgreSQL 17 en Docker (opcional en el TP2)
+.env.example                    plantilla de conexión (copiar a .env; .env no se versiona)
 
 src/
   scraper.py                    UNIDAD 1: extracción (Fases A, B y C)
   db.py                         conexión a PostgreSQL desde el entorno
   etl.py                        CSV -> staging -> tabla tipada + verificación
-  corpus.py                     PostgreSQL -> list[Documento]   (texto CRUDO)
-  preprocesamiento.py           tokenizar()                     (TOKENIZADO)
+  corpus.py                     CSV o PostgreSQL -> list[Documento]   (texto CRUDO)
+  preprocesamiento.py           tokenizar()                           (TOKENIZADO)
   experimentos.py               las cuatro preguntas, medidas
   embeddings.py                 Word2Vec/FastText propios contra SBW
+  vectores.py                   TP2: validar, normalizar, coseno
+  busqueda.py                   TP2: TF-IDF, promedios y SBERT con interfaz común
+  evaluacion.py                 TP2: consultas, precision@k, piso de azar, bootstrap
 
 sql/
   01_esquema.sql                DDL: tipos, constraints, índices GIN
@@ -686,14 +749,25 @@ data/
   libros_ampliado.csv           corpus de 1700 libros, solo para embeddings
   *_parcial.jsonl               buffers de trabajo (ignorados por git)
   modelos/                      embeddings entrenados (ignorados por git)
+  embeddings/                   TP2: matrices guardadas por el notebook (ignoradas)
 
 docs/
   diseno_extraccion.md          análisis previo de la Unidad 1 (Parte 1)
+  AUDITORIA_TP2.md              auditoría del TP2: qué estaba, qué se corrigió, qué falta
+  propuesta_queries.md          TP2: las consultas para validar, con casillas
+  informe_borrador.md           TP2: borrador del informe
 
 tests/
   test_parsers.py               pruebas de los parsers, sin red ni base
+  test_tp2.py                   TP2: vectores, métricas, consultas, representaciones
   fixtures/                     HTML de muestra, versionado
+
+tools/
+  generar_notebook.py           TP2: reescribe el notebook desde cero (sin salidas)
+  ejecutar_notebook.py          TP2: "reiniciar y ejecutar todo" fuera de Jupyter
 ```
+
+**Para continuar el TP2**, ver [`TRASPASO.md`](TRASPASO.md#continuar-el-tp2-qué-falta-y-cómo-hacerlo).
 
 **Fuera del repositorio**, en la carpeta que lo contiene:
 
