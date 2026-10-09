@@ -1,4 +1,28 @@
+# Unidad 1 - scraping
 playwright==1.56.0
 beautifulsoup4==4.14.2
 lxml==6.0.2
 pandas==2.3.3
+
+# Unidad 2 - base de datos (opcional en el TP2: la catedra habilito trabajar
+# desde el CSV; corpus.py solo importa psycopg si se pide fuente="postgres")
+psycopg[binary]==3.2.12
+python-dotenv==1.2.1
+
+# Unidad 2 - procesamiento del lenguaje
+spacy==3.8.16
+scikit-learn==1.9.1
+gensim==4.4.0
+lingua-language-detector==2.2.0
+
+# TP2 - modelo de oracion y graficos. sentence-transformers instala torch; en
+# una maquina sin GPU conviene instalar antes la version CPU, que es mucho mas
+# liviana:  pip install torch --index-url https://download.pytorch.org/whl/cpu
+# No fijar numpy==1.23.5 (el pin del apunte de la Unidad 2): no convive con
+# sentence-transformers. gensim 4.4 funciona con numpy 2.
+sentence-transformers==6.1.0
+matplotlib==3.11.2
+
+# Documentacion (generacion de PDF)
+pypdf==6.18.0
+reportlab==5.0.1

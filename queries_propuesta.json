@@ -1,0 +1,270 @@
+{
+  "estado": "PROVISIONAL - PENDIENTE DE VALIDACION DEL GRUPO. No usar para conclusiones academicas.",
+  "como_se_armo": "Las consultas y los juicios de relevancia los propuso un asistente de IA leyendo las 200 sinopsis completas de data/libros.csv, ANTES de ejecutar cualquier modelo de busqueda. Los candidatos NO se buscaron por coincidencia de palabras (eso sesgaria la evaluacion a favor de TF-IDF): cada consulta se juzgo contra el corpus entero. Las consultas sin solapamiento se reformularon hasta tener cero palabras en comun con sus relevantes, verificado con la tokenizacion de TF-IDF, sin mirar resultados de ningun modelo.",
+  "criterio_relevancia": "Un libro es relevante si alguien que escribe la consulta quedaria satisfecho de encontrarlo, juzgando por lo que dice su sinopsis (no por el titulo ni por la etiqueta de genero, salvo en q06, donde se explicita). Juicio binario.",
+  "campos": {
+    "relevantes": "juicio firme del asistente; el grupo debe confirmarlo",
+    "dudosos": "casos limite que el grupo tiene que decidir: pasarlos a relevantes o descartarlos. Mientras sigan aca, la evaluacion los trata como NO relevantes y reporta aparte una variante que si los cuenta.",
+    "sin_solapamiento": "true si la consulta no comparte ninguna palabra (tokenizacion TF-IDF) con sus relevantes"
+  },
+  "consultas": [
+    {
+      "id": "q01",
+      "consulta": "novelas de vampiros",
+      "tipo": "tematica",
+      "nota": "Parecía una consulta léxica, pero solo 1 de los 6 relevantes contiene alguna palabra de la consulta: los textos dicen 'vampiro' o 'vampira', y TF-IDF sin lematizar trata a 'vampiros' como otra palabra.",
+      "relevantes": [
+        {"id": 124988, "titulo": "El invitado de Drácula", "motivo": "relatos de Stoker en torno a Drácula"},
+        {"id": 125304, "titulo": "La sangre del vampiro", "motivo": "protagonista vampira psíquica"},
+        {"id": 125387, "titulo": "Beber en rojo", "motivo": "reescritura del mito de Drácula"},
+        {"id": 125138, "titulo": "El pájaro y el corazón de piedra", "motivo": "protagonista convertida en vampira"},
+        {"id": 125007, "titulo": "Cuando caían las noches", "motivo": "vampiro protagonista"},
+        {"id": 125173, "titulo": "La muerta enamorada y otros relatos fantásticos", "motivo": "el vampirismo es uno de sus temas; el relato titular es un clásico de vampiros"}
+      ],
+      "dudosos": [
+        {"id": 124530, "titulo": "Alfa", "motivo": "los vampiros aparecen como facción, pero la protagonista es híbrida humano-licántropo"}
+      ]
+    },
+    {
+      "id": "q02",
+      "consulta": "criaturas chupasangres que acechan de noche",
+      "tipo": "sin_solapamiento",
+      "sin_solapamiento": true,
+      "nota": "Misma necesidad de información que q01 con otras palabras: aísla el efecto léxico. Comparte palabras con 19 libros NO relevantes (distractores léxicos). Dos relevantes contienen variantes morfológicas (criatura, noches) que TF-IDF no aprovecha porque no lematiza.",
+      "relevantes": [
+        {"id": 124988, "titulo": "El invitado de Drácula", "motivo": "igual que q01"},
+        {"id": 125304, "titulo": "La sangre del vampiro", "motivo": "igual que q01"},
+        {"id": 125387, "titulo": "Beber en rojo", "motivo": "igual que q01"},
+        {"id": 125138, "titulo": "El pájaro y el corazón de piedra", "motivo": "igual que q01"},
+        {"id": 125007, "titulo": "Cuando caían las noches", "motivo": "igual que q01"},
+        {"id": 125173, "titulo": "La muerta enamorada y otros relatos fantásticos", "motivo": "igual que q01"}
+      ],
+      "dudosos": [
+        {"id": 124530, "titulo": "Alfa", "motivo": "igual que q01"}
+      ]
+    },
+    {
+      "id": "q03",
+      "consulta": "historias de viajes en el tiempo",
+      "tipo": "tematica",
+      "relevantes": [
+        {"id": 124111, "titulo": "Los años del cuervo", "motivo": "el juego Hyperversum transporta a los personajes al año 1215"},
+        {"id": 124512, "titulo": "Norby salva al universo", "motivo": "viaje por distintas épocas para restaurar el orden temporal"},
+        {"id": 124684, "titulo": "Buscando al Lobo de las Highlands", "motivo": "la protagonista pasa de 2021 a 1355"},
+        {"id": 125061, "titulo": "El canto del cuerno", "motivo": "Leonor vuelve a ser arrastrada en el tiempo"},
+        {"id": 124915, "titulo": "El pozo de la eternidad", "motivo": "una brecha arrastra a los protagonistas a una época anterior"}
+      ],
+      "dudosos": [
+        {"id": 124729, "titulo": "Sombras en la eternidad", "motivo": "regresiones mentales a las Cruzadas, no un viaje físico"},
+        {"id": 124771, "titulo": "Siete cuentos imposibles", "motivo": "solo uno de los siete cuentos trata de viajar al futuro"},
+        {"id": 124694, "titulo": "Poshumanas y distópicas Vol. 1", "motivo": "antología que menciona máquinas del tiempo entre sus temas"},
+        {"id": 124819, "titulo": "Poshumanas y distópicas Vol. 2", "motivo": "ídem"}
+      ]
+    },
+    {
+      "id": "q04",
+      "consulta": "extraterrestres que amenazan con invadir la Tierra",
+      "tipo": "tematica",
+      "relevantes": [
+        {"id": 124376, "titulo": "El problema de los Tres Cuerpos", "motivo": "contacto con extraterrestres y amenaza de extinción"},
+        {"id": 124375, "titulo": "El bosque oscuro", "motivo": "la Tierra tiene cuatro siglos para defenderse de Trisolaris"},
+        {"id": 124373, "titulo": "El fin de la muerte", "motivo": "tercera parte del conflicto con Trisolaris"},
+        {"id": 124433, "titulo": "Señales desde las estrellas", "motivo": "la humanidad es suplantada en silencio por algo que no es de la Tierra"},
+        {"id": 124505, "titulo": "Los ladrones de cerebros", "motivo": "los Narks llegan de otra galaxia para apoderarse de la Tierra"},
+        {"id": 124599, "titulo": "Islas de la ascuaoscura", "motivo": "invasores de las estrellas amenazan con conquistar al pueblo protagonista"}
+      ],
+      "dudosos": [
+        {"id": 125331, "titulo": "Triplanetario", "motivo": "razas alienígenas manipulan a la humanidad, pero no es una invasión"},
+        {"id": 124860, "titulo": "El gran espectáculo", "motivo": "relatos de primeros contactos alienígenas"},
+        {"id": 124753, "titulo": "Abominación atlántica", "motivo": "ser no humano que amenaza a la humanidad, pero hallado en el fondo del mar"}
+      ]
+    },
+    {
+      "id": "q05",
+      "consulta": "historias de fantasmas y casas encantadas",
+      "tipo": "tematica",
+      "relevantes": [
+        {"id": 123734, "titulo": "Esa maldita voz y otros relatos fantasmagóricos", "motivo": "relatos de fantasmas"},
+        {"id": 123757, "titulo": "El Monte de las Ánimas y otras leyendas góticas", "motivo": "leyendas con fantasmas y maldiciones"},
+        {"id": 124102, "titulo": "El Otro", "motivo": "el espectro del marido muerto acosa a la viuda"},
+        {"id": 124513, "titulo": "Té para los fantasmas", "motivo": "una pasadora de fantasmas busca el fantasma de su madre"},
+        {"id": 124544, "titulo": "La casa zafiro", "motivo": "mansión con el fantasma de un asesino"},
+        {"id": 124077, "titulo": "Gótico", "motivo": "casa que invade los sueños de la protagonista"},
+        {"id": 124177, "titulo": "La habitación secreta", "motivo": "caserón con una habitación cerrada donde se oyen pasos y voces"},
+        {"id": 124585, "titulo": "Hay algo malo en casa", "motivo": "un ente vive en la habitación de una niña"},
+        {"id": 124991, "titulo": "Venus en las tinieblas", "motivo": "antología gótica con 'El espectro' y 'La casa encantada'"}
+      ],
+      "dudosos": [
+        {"id": 125241, "titulo": "El secreto de la señorita Primrose", "motivo": "una médium ve a los muertos, pero es una intriga romántica"},
+        {"id": 124210, "titulo": "La chica nueva", "motivo": "la chica de la que se enamora el protagonista está muerta"},
+        {"id": 125315, "titulo": "Despertar", "motivo": "una madre cree ver el fantasma de su hijo; es una novela de posguerra"},
+        {"id": 124539, "titulo": "Ombria oculta", "motivo": "ciudad subterránea llena de fantasmas, pero es fantasía épica"},
+        {"id": 125173, "titulo": "La muerta enamorada y otros relatos fantásticos", "motivo": "apariciones y ultratumba entre sus temas"}
+      ]
+    },
+    {
+      "id": "q06",
+      "consulta": "quiero leer algo que me dé miedo",
+      "tipo": "amplia",
+      "nota": "Consulta amplia a propósito, para mostrar el piso de azar: la relevancia es la etiqueta de género 'Terror' del sitio (54 libros, el 27% del corpus). Es la única consulta cuya relevancia sale de metadata y no de la lectura. Si se la deja, el piso de azar de P@k ronda 0,27.",
+      "relevantes_por_genero": "Terror",
+      "relevantes": [],
+      "dudosos": []
+    },
+    {
+      "id": "q07",
+      "consulta": "una historia de amor en la alta sociedad de la Inglaterra victoriana",
+      "tipo": "tematica",
+      "relevantes": [
+        {"id": 125076, "titulo": "Por una vida amándote", "motivo": "romance con el heredero de un marquesado en Londres"},
+        {"id": 125353, "titulo": "La nobleza del conde", "motivo": "condesa viuda y heredero, matrimonio de conveniencia"},
+        {"id": 125354, "titulo": "El corazón del duque", "motivo": "romance entre una lady y un futuro duque"},
+        {"id": 125394, "titulo": "La pasión del marqués", "motivo": "hija de barón y marqués"},
+        {"id": 125396, "titulo": "La redención del vizconde", "motivo": "debutante y vizconde seductor"},
+        {"id": 125406, "titulo": "Una oveja descarriada para Norfolk", "motivo": "la reina busca esposa para un duque"},
+        {"id": 125407, "titulo": "El regreso del caballero", "motivo": "nuevo conde de Pembroke y una señorita"},
+        {"id": 125408, "titulo": "El destino de una rosa inglesa", "motivo": "matrimonio arreglado entre una lady y un marqués"},
+        {"id": 125170, "titulo": "El lirio de Ludgate Hill", "motivo": "lady de luto y un caballero"},
+        {"id": 125316, "titulo": "Una dulce propuesta para un conde", "motivo": "conde y princesa en Londres"},
+        {"id": 125314, "titulo": "El corazón de Ruby", "motivo": "lord que busca esposa en Londres"},
+        {"id": 125379, "titulo": "El hechizo de Agatha", "motivo": "joven pobre y un lord en Londres"},
+        {"id": 125473, "titulo": "Aquel misterio que nos unió", "motivo": "cozy mystery victoriano con romance con un vizconde"}
+      ],
+      "dudosos": [
+        {"id": 125351, "titulo": "Un corazón en peligro", "motivo": "romance, pero la sinopsis no sitúa época ni clase social"},
+        {"id": 125117, "titulo": "Costuras de amor", "motivo": "costurera y modisto de la aristocracia londinense; no son nobles"},
+        {"id": 125241, "titulo": "El secreto de la señorita Primrose", "motivo": "Londres victoriano, pero centrada en la desaparición"},
+        {"id": 125391, "titulo": "Los vecinos de lady Chester", "motivo": "comedia social victoriana sin historia de amor explícita"},
+        {"id": 125105, "titulo": "Una novia dada por muerta", "motivo": "Belle Époque (posterior a la era victoriana); venganza más que romance"},
+        {"id": 125273, "titulo": "El mensajero", "motivo": "amor prohibido en 1900 visto por un niño; no es novela romántica"}
+      ]
+    },
+    {
+      "id": "q08",
+      "consulta": "novelas ambientadas en la Segunda Guerra Mundial",
+      "tipo": "tematica",
+      "relevantes": [
+        {"id": 125431, "titulo": "Mi querida Irene", "motivo": "Irène Némirovsky y la deportación en la Francia ocupada"},
+        {"id": 125527, "titulo": "Extraños en el tiempo", "motivo": "niños en el Londres del Blitz"},
+        {"id": 125374, "titulo": "En un hotel de Malmö", "motivo": "Suecia 1940-1943, soldado en la frontera finlandesa"},
+        {"id": 125265, "titulo": "El nombre en el muro", "motivo": "un maquis de la Resistencia durante la Ocupación"}
+      ],
+      "dudosos": []
+    },
+    {
+      "id": "q09",
+      "consulta": "novelas sobre la guerra civil española",
+      "tipo": "tematica",
+      "relevantes": [
+        {"id": 125155, "titulo": "Tierra de sueños", "motivo": "niños evacuados a México en 1937 y el tesoro de la República"},
+        {"id": 125164, "titulo": "El último caso de Unamuno", "motivo": "Salamanca 1936 ocupada por los sublevados"}
+      ],
+      "dudosos": [
+        {"id": 125161, "titulo": "Los amores paralelos", "motivo": "Asturias en los años 30 y la revolución de 1934, anterior a la guerra"}
+      ]
+    },
+    {
+      "id": "q10",
+      "consulta": "robots e inteligencias artificiales",
+      "tipo": "tematica",
+      "nota": "Ninguno de los 6 relevantes contiene una palabra de la consulta: dicen 'robot', 'robótica', 'androide', 'IA'. Además, dos relevantes (Norby 124496 y 124498) tienen la sinopsis idéntica por un error del sitio.",
+      "relevantes": [
+        {"id": 124496, "titulo": "La gran aventura de Norby", "motivo": "robot protagonista, leyes de la robótica"},
+        {"id": 124498, "titulo": "Norby regresa a la Tierra", "motivo": "ídem (sinopsis duplicada)"},
+        {"id": 124512, "titulo": "Norby salva al universo", "motivo": "robot extraterrestre protagonista"},
+        {"id": 124524, "titulo": "Protocolo rebelde", "motivo": "androide / IA asesina protagonista"},
+        {"id": 124860, "titulo": "El gran espectáculo", "motivo": "un tanque autoconsciente"},
+        {"id": 125075, "titulo": "La máquina se detiene", "motivo": "una Máquina omnisciente gobierna a la humanidad"}
+      ],
+      "dudosos": [
+        {"id": 124694, "titulo": "Poshumanas y distópicas Vol. 1", "motivo": "antología que menciona inteligencias artificiales entre sus temas"},
+        {"id": 124819, "titulo": "Poshumanas y distópicas Vol. 2", "motivo": "ídem"},
+        {"id": 125358, "titulo": "Imperio (Víctor Conde)", "motivo": "aparece una inteligencia no orgánica, como elemento secundario"}
+      ]
+    },
+    {
+      "id": "q11",
+      "consulta": "un mundo de fantasía con dragones",
+      "tipo": "tematica",
+      "relevantes": [
+        {"id": 125132, "titulo": "Las flores en llamas", "motivo": "el Ejército Dracónico y un gran wyrm"},
+        {"id": 124599, "titulo": "Islas de la ascuaoscura", "motivo": "una joven dragona encadenada en forma humana"},
+        {"id": 124915, "titulo": "El pozo de la eternidad", "motivo": "los Dragones Aspectos en el apogeo de su poder"},
+        {"id": 124870, "titulo": "La historia interminable", "motivo": "Fantasia, tierras de dragones y gigantes"}
+      ],
+      "dudosos": [
+        {"id": 124512, "titulo": "Norby salva al universo", "motivo": "aparece la reina de las tierras de los grandes dragones, de forma secundaria"}
+      ]
+    },
+    {
+      "id": "q12",
+      "consulta": "bucaneros, filibusteros y abordajes en el océano",
+      "tipo": "sin_solapamiento",
+      "sin_solapamiento": true,
+      "nota": "Cero palabras en común con los relevantes, y tampoco variantes morfológicas. Solo 2 libros del corpus comparten alguna palabra con la consulta.",
+      "relevantes": [
+        {"id": 125216, "titulo": "La canción de Hands", "motivo": "el tesoro del pirata Barbanegra"},
+        {"id": 125274, "titulo": "Malditos", "motivo": "incluye relatos de piratas que aterrorizaron los mares"}
+      ],
+      "dudosos": [
+        {"id": 124546, "titulo": "Tu sangre en mis manos", "motivo": "corsarios en el Mediterráneo del siglo XVI, como trasfondo"},
+        {"id": 125417, "titulo": "Patrulla galáctica", "motivo": "piratas, pero espaciales"}
+      ]
+    },
+    {
+      "id": "q13",
+      "consulta": "una epidemia que diezma a la población",
+      "tipo": "sin_solapamiento",
+      "sin_solapamiento": true,
+      "nota": "Cero palabras en común con los relevantes. En 125224 la peste ni siquiera se nombra: aparece como 'el Ángel Negro de la Muerte que asola el reino'.",
+      "relevantes": [
+        {"id": 125136, "titulo": "Entre dos fuegos", "motivo": "1348, huérfana de la peste negra"},
+        {"id": 125224, "titulo": "Don Juan Manuel: El guardián de las palabras", "motivo": "una mortandad que abate a campesinos, nobles y reyes"}
+      ],
+      "dudosos": [
+        {"id": 124229, "titulo": "Ahora todo es mejor", "motivo": "una pandemia, pero de felicidad, no mortal"}
+      ]
+    },
+    {
+      "id": "q14",
+      "consulta": "una sociedad futura sometida a un poder totalitario",
+      "tipo": "tematica",
+      "relevantes": [
+        {"id": 124851, "titulo": "El talón de hierro", "motivo": "primera distopía política: una oligarquía aplasta a la sociedad"},
+        {"id": 125075, "titulo": "La máquina se detiene", "motivo": "humanidad confinada y sometida a la Máquina"},
+        {"id": 124768, "titulo": "Amanecer en la cosecha", "motivo": "el Capitolio somete a los distritos de Panem"},
+        {"id": 125042, "titulo": "Las sendas púrpuras", "motivo": "la oligarquía del Purpurado condena planetas al aislamiento"},
+        {"id": 125002, "titulo": "Los sicarios de Dios", "motivo": "planeta gobernado por el fanatismo, donde la intolerancia es norma"}
+      ],
+      "dudosos": [
+        {"id": 124229, "titulo": "Ahora todo es mejor", "motivo": "etiquetada como distopía, pero el conflicto es corporativo, no totalitario"},
+        {"id": 124694, "titulo": "Poshumanas y distópicas Vol. 1", "motivo": "antología con relatos distópicos"},
+        {"id": 124819, "titulo": "Poshumanas y distópicas Vol. 2", "motivo": "ídem"}
+      ]
+    },
+    {
+      "id": "q15",
+      "consulta": "la orden de los templarios",
+      "tipo": "lexica",
+      "relevantes": [
+        {"id": 125128, "titulo": "El guardián de los dioses", "motivo": "tesoro y lista de maestres templarios en Orvieto"},
+        {"id": 124729, "titulo": "Sombras en la eternidad", "motivo": "pergaminos que prueban que la Orden del Temple sobrevivió"}
+      ],
+      "dudosos": []
+    },
+    {
+      "id": "q16",
+      "consulta": "aventuras de caballeros Jedi",
+      "tipo": "lexica",
+      "nota": "Consulta donde TF-IDF tiene todo a favor: 'Jedi' es un nombre propio raro que solo aparece en estos libros.",
+      "relevantes": [
+        {"id": 124737, "titulo": "Cataclismo", "motivo": "Star Wars: High Republic"},
+        {"id": 124738, "titulo": "Convergencia", "motivo": "Star Wars: High Republic"},
+        {"id": 124739, "titulo": "La batalla de Jedha", "motivo": "Star Wars: High Republic"},
+        {"id": 124740, "titulo": "El ojo de la oscuridad", "motivo": "Star Wars: High Republic"},
+        {"id": 124741, "titulo": "Estrella caída", "motivo": "Star Wars: High Republic"}
+      ],
+      "dudosos": []
+    }
+  ]
+}
