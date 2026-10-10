@@ -12,16 +12,22 @@ Corpus de sinopsis de libros construido a partir de la informacion publica de
 
 | Entregable | Archivo | Estado |
 |---|---|---|
-| Notebook ejecutado | [`TP2_Beltramo_Cortinas_Cura_Maragliano.ipynb`](TP2_Beltramo_Cortinas_Cura_Maragliano.ipynb) | ejecutado de punta a punta; **números provisionales** hasta validar las consultas |
-| Conjunto de evaluación | `queries.json` | **pendiente**: hoy existe la propuesta [`queries_propuesta.json`](queries_propuesta.json), a validar por el grupo con [`docs/propuesta_queries.md`](docs/propuesta_queries.md) |
-| Informe (≤ 3 páginas) | `informe.pdf` | **pendiente**: borrador en [`docs/informe_borrador.md`](docs/informe_borrador.md) |
+| Notebook ejecutado | [`TP2_Beltramo_Cortinas_Cura_Maragliano.ipynb`](TP2_Beltramo_Cortinas_Cura_Maragliano.ipynb) | ejecutado de punta a punta en Colab, con las salidas visibles |
+| Conjunto de evaluación | [`queries.json`](queries.json) | 16 consultas con sus libros relevantes definidos a mano y validados por el grupo |
+| Informe (≤ 3 páginas) | [`informe.pdf`](informe.pdf) | entregado |
 | Base en Supabase | — | **no corresponde**: la cátedra avisó que el TP2 no requiere Postgres; se trabaja desde el CSV |
 
-**Cómo ejecutarlo.** En Colab: abrir el notebook y ejecutar todo. La primera celda clona este
-repositorio, instala gensim y lingua y descarga el SBW (1,1 GB). En una máquina propia:
-instalar `requirements.txt` y ejecutar el notebook desde la raíz del repositorio. Si el SBW no
-está en la carpeta que contiene al repositorio, se descarga solo, o se puede indicar su ruta
-con la variable `SBW_PATH`.
+**Resultado, en una línea.** SBERT (`distiluse-base-multilingual-cased-v1`) obtiene
+precision@5 = 0,363 contra 0,177 de TF-IDF y 0,041 del azar; los promedios de word vectors no
+superan a TF-IDF. Los intervalos, las comparaciones pareadas y las limitaciones están en el
+informe y en las secciones 6 y 7 del notebook.
+
+**Cómo ejecutarlo.** En Colab: abrir el notebook y ejecutar todo. La primera celda clona la
+rama `main` de este repositorio, instala gensim y lingua y descarga el SBW (1,1 GB). En una
+máquina propia: instalar `requirements.txt` y ejecutar el notebook desde la raíz del
+repositorio. Si el SBW no está en la carpeta que contiene al repositorio, se descarga solo, o
+se puede indicar su ruta con la variable `SBW_PATH`. La última celda comprueba 15 etapas de la
+ejecución.
 
 **Dónde está cada cosa.** El notebook narra y muestra. La lógica está en módulos con tests:
 
@@ -139,6 +145,10 @@ página que lista los libros de una categoría y otro para la ficha de un libro.
 en Docker) y desde ahí lo consumen los análisis: TF-IDF para encontrar qué distingue a cada
 sinopsis, y *embeddings* (Word2Vec, FastText) para representar palabras como vectores.
 
+**TP2 — buscar por significado.** Se compara TF-IDF contra embeddings de palabra y de oración
+(SBERT) en una búsqueda de libros, y se mide con consultas propias, precision@k y un piso de
+azar. Lee el corpus directo del CSV: no necesita la base.
+
 La decisión que atraviesa todo el proyecto: **el corpus guarda el texto crudo, sin
 normalizar**. Pasar a minúsculas o quitar palabras vacías es algo que necesita *cada
 modelo*, y cada uno necesita algo distinto, así que se hace en el momento de usarlo y no
@@ -148,7 +158,8 @@ antes. Está explicado en [El preprocesamiento pertenece al modelo](#el-preproce
 
 ## Instalación
 
-Requiere **Python 3.10 o superior** y **Docker Desktop**. Desde la raíz del proyecto:
+Requiere **Python 3.10 o superior**. **Docker Desktop** solo hace falta para la base de datos
+de la Unidad 2; el TP2 no lo necesita. Desde la raíz del proyecto:
 
 ```bash
 python -m venv venv
@@ -170,7 +181,7 @@ python -m playwright install chromium
 
 > En Linux o macOS el activador es `source venv/bin/activate`.
 
-### Base de datos
+### Base de datos (solo Unidad 2; el TP2 no la necesita)
 
 La configuración de conexión sale de un archivo `.env`, que no se versiona. Crearlo a
 partir del ejemplo:
@@ -179,49 +190,30 @@ partir del ejemplo:
 copy .env.example .env
 ```
 
-Con **Docker Desktop abierto**, levantar PostgreSQL:
+Con **Docker Desktop abierto**, levantar PostgreSQL y verificar que quede `healthy`:
 
 ```bash
 docker compose up -d
 ```
 
-Verificar que quedó `healthy` antes de seguir:
-
 ```bash
 docker compose ps
 ```
 
-Cargar el corpus a la base:
+Cargar el corpus a la base (tiene que terminar con `CARGA OK`). El corpus ampliado es
+opcional y solo hace falta para entrenar embeddings:
 
 ```bash
 python src/etl.py
 ```
 
-Tiene que terminar con `CARGA OK`. Para el corpus ampliado (opcional, solo hace falta para
-entrenar embeddings):
-
 ```bash
 python src/etl.py --csv data/libros_ampliado.csv --tabla libros_ampliado
 ```
 
-### Conectarse con DBeaver
-
-| Campo | Valor |
-|---|---|
-| Host | `127.0.0.1` |
-| Puerto | `5433` |
-| Base | `tuia` |
-| Usuario | `tuia` |
-| Contraseña | `tuia` |
-
-> **Usar `127.0.0.1`, no `localhost`.** El puerto se publica atado a IPv4 para no exponer la
-> base a la red, pero `localhost` en Windows resuelve primero a `::1` (IPv6), donde no
-> escucha nadie: cada conexión espera el *timeout* de TCP antes de caer a IPv4. Medido en
-> este proyecto: **130 segundos contra 0,02**. Todo funciona igual, solo que
-> inexplicablemente lento.
-
-El puerto es **5433** y no el 5432 habitual, para no chocar con un PostgreSQL nativo que
-alguien pueda tener instalado.
+Para inspeccionarla desde DBeaver: host `127.0.0.1` (**no** `localhost`, ver
+[Principales dificultades](#principales-dificultades-encontradas)), puerto `5433` (no el 5432
+habitual, para no chocar con un PostgreSQL nativo), y `tuia` como base, usuario y contraseña.
 
 ### El modelo pre-entrenado (opcional)
 
@@ -232,7 +224,7 @@ y dejarlo **en la carpeta que contiene al repositorio**, no adentro:
 ```
 Procesamiento del Lenguaje Natural/
 ├── SBW-vectors-300-min5.bin.gz     <- acá
-└── TUIA/                           <- el repositorio
+└── NLP-C4-TUIA/                    <- el repositorio
 ```
 
 Sin ese archivo todo lo demás sigue funcionando: los módulos avisan y usan solo los
@@ -272,6 +264,9 @@ comando retoma donde había quedado. Para forzar una extracción desde cero, bor
 archivo.
 
 ### Unidad 2 — base de datos y análisis
+
+Los comandos de `db.py` y `etl.py` necesitan la base levantada. `corpus.py` y
+`preprocesamiento.py` funcionan solo con el CSV.
 
 | Comando | Qué hace |
 |---|---|
@@ -315,129 +310,40 @@ segundos con `entrenar`.
 
 ### Tests
 
-Los parsers se prueban contra HTML guardado en disco, sin tocar la red ni la base (corre en
-menos de un segundo):
+Todos corren sin red y sin base de datos. Los parsers se prueban contra HTML guardado en
+disco (menos de un segundo); el TP2, contra el corpus real:
 
 ```bash
 python tests/test_parsers.py
+```
+
+```bash
+python tests/test_tp2.py
 ```
 
 ---
 
 ## Resultados de la Unidad 2
 
-Las cuatro preguntas se respondieron midiendo sobre el corpus. **Tres de las cuatro dieron
-distinto de lo esperado**, y se reportan como salieron.
+Las cuatro preguntas se responden **midiendo** sobre el corpus: el código está en
+[`src/experimentos.py`](src/experimentos.py) y el notebook del TP2 las ejecuta en la sección 2,
+con sus tablas y su lectura. **Tres de las cuatro dieron distinto de lo esperado**, y se reportan
+como salieron.
 
-### 1. ¿Cuántas sinopsis hacen falta para que TF-IDF sea estable?
-
-Se fijan 20 documentos sonda y se varía el **corpus de fondo** que define el IDF, con 30
-réplicas por tamaño. Se mide cuánto coinciden los 10 términos característicos entre
-réplicas distintas del mismo tamaño.
-
-Es importante que lo único que varíe sea el fondo: si se resamplearan también los
-documentos medidos, se mezclarían dos fuentes de variación.
-
-| fondo | Jaccard@10 | solape entre réplicas |
-|---|---|---|
-| 10 | 0,230 | 1% |
-| 100 | 0,284 | 6% |
-| 300 | 0,371 | 18% |
-| 600 | 0,444 | 36% |
-| 1200 | 0,620 | 71% |
-
-(Corrida sobre el corpus ampliado, `--tabla libros_ampliado`.)
-
-**La curva no se aplana**: el último salto es el más grande. Con 1700 documentos todavía no
-alcanza. La causa es que el **51% del vocabulario aparece una sola vez**, y TF-IDF premia
-justamente esos términos, con lo cual los característicos de un documento son en buena
-medida accidentes de muestreo.
-
-La columna de solape es una advertencia metodológica: al muestrear sin reposición de un
-conjunto finito, cuando el fondo se acerca al total las réplicas comparten casi los mismos
-documentos y el Jaccard sube por esa razón y no porque haya convergencia.
-
-### 2. ¿Qué sesgo introduce el texto promocional?
-
-**El resultado contradice la hipótesis obvia.** Solo el **0,8%** de los términos
-característicos (16 de 2000) son vocabulario publicitario. Quitarlo del clasificador no
-cambia el micro-F1: sobre 20 splits distintos, la diferencia pareada es **−0,000 ± 0,009**,
-y el vocabulario ayuda en 9 splits y perjudica en 10.
-
-> Una versión anterior informaba "+0,005" sobre un solo split, y además tenía un bug: la
-> lista promocional está escrita sin tildes y los tokens las conservan, así que la ablación
-> no quitaba `edición`, `éxito`, `clásico`, `jamás`… (11 de 37 términos, 24% de las
-> apariciones). Corregido; la conclusión cualitativa se mantiene, pero ahora está medida.
-
-La razón: TF-IDF ya penaliza esas palabras, porque aparecen en *todas* las sinopsis y su
-IDF es bajo. El filtro ya estaba puesto por construcción.
-
-El sesgo real está en otro lado y no se arregla con una lista de palabras: una sinopsis no
-describe el libro, **selecciona lo vendible**. Omite el final, exagera el conflicto y
-destaca lo que se parece a otros éxitos. Un clasificador entrenado con esto aprende de qué
-trata *la campaña*, y no generalizaría a reseñas ni al texto del libro.
-
-### 3. ¿Cómo cambia la evaluación en multi-etiqueta?
-
-Ningún libro del corpus tiene un solo género (mínimo 2, promedio 2,83), así que el problema
-es multi-etiqueta **por construcción**, no por elección.
-
-| métrica | clasificador | trivial |
-|---|---|---|
-| subset accuracy | 0,400 | 0,000 |
-| hamming loss | 0,113 | 0,192 |
-| **f1 micro** | 0,750 | **0,470** |
-| **f1 macro** | 0,541 | **0,092** |
-
-La columna "trivial" es un clasificador que **no lee el texto**: predice siempre "Novela",
-que aparece en el 85% de los libros. Saca micro-F1 0,470 y macro-F1 0,092.
-
-Ahí está la respuesta: reportar solo micro-F1 haría pasar por aceptable a un modelo ciego.
-En multi-clase hay una métrica obvia; en multi-etiqueta hay varias que cuentan historias
-opuestas, y hay que reportar micro y macro **juntas** y siempre contra una línea base
-trivial.
-
-Además, 13 de los 27 géneros tienen menos de 5 libros: no se pueden aprender ni
-estratificar en un split.
-
-### 4. ¿Qué pasa con los libros en gallego o catalán?
-
-**Hay un libro en gallego en el corpus, y el detector no lo ve.** Según `lingua`, las 200
-sinopsis son castellano (confianza mínima 0,998). Pero un segundo instrumento, que busca
-palabras funcionales que solo existen en gallego (*unha*, *dunha*, *dun*, *dous*…), encuentra
-una: *Morning Star* (id 124205). `lingua` la etiquetó como **castellano con confianza
-0,998**, justamente la mínima del corpus. Como sus stopwords no se filtran, sus dos términos
-TF-IDF de mayor peso son *dun* y *dunha*.
-
-> Una versión anterior concluía "las 200 son castellano, la premisa no se cumple". Era
-> falso, y el propio experimento anticipaba por qué.
-
-Decir "no encontramos ninguno" no significa nada si el instrumento no puede encontrarlos.
-Por eso se verificó con tres traducciones del mismo párrafo:
-
-| lengua de entrada | detectado | confianza |
-|---|---|---|
-| castellano | SPANISH | 0,97 |
-| catalán | CATALAN | 1,00 |
-| **gallego** | **PORTUGUESE** | **0,91** |
-
-**`lingua` no tiene modelo de gallego.** Lo reporta como otra lengua con alta confianza
-(portugués en el control, castellano en el corpus real): un falso negativo silencioso, que
-es el peor caso porque no se distingue de un acierto. El catalán sí se detecta bien.
-
-Conclusión operativa: detectar el idioma antes de tokenizar sí, pero sin confiar en la
-etiqueta cuando las lenguas candidatas son cercanas y alguna no está en el repertorio del
-detector.
+| Pregunta | Resultado |
+|---|---|
+| **1. ¿Cuántas sinopsis hacen falta para que TF-IDF sea estable?** | **No se estabiliza** dentro del rango medido. Con un corpus de fondo de 10 documentos, dos muestras coinciden en el 23% de los 10 términos principales; con 1200, en el 62%, y el último salto es el más grande. Causa: el 51% del vocabulario aparece una sola vez, y TF-IDF premia justamente esos términos. |
+| **2. ¿Qué sesgo introduce el texto promocional?** | **Menos del esperado**: solo el 0,8% de los términos característicos (16 de 2000) es vocabulario publicitario, y quitarlo no cambia el micro-F1 (−0,000 ± 0,009 sobre 20 splits). TF-IDF ya lo penaliza porque aparece en todas las sinopsis. El sesgo real es otro: una sinopsis no describe el libro, **selecciona lo vendible**. |
+| **3. ¿Cómo cambia la evaluación en multi-etiqueta?** | Ningún libro tiene un solo género (mínimo 2, promedio 2,83): es multi-etiqueta **por construcción**. Un clasificador que predice siempre «Novela» (85% de los libros) saca micro-F1 0,470 y macro-F1 0,092, contra 0,750 y 0,541 del clasificador real. Hay que reportar micro y macro **juntas** y contra una línea base trivial. Además, 13 de los 27 géneros tienen menos de 5 libros. |
+| **4. ¿Qué pasa con los libros en gallego o catalán?** | **Hay un libro en gallego** (*Morning Star*, id 124205) y el detector no lo ve: `lingua` lo etiqueta castellano con confianza 0,998. `lingua` no tiene modelo de gallego (en un control con tres traducciones lo clasifica como portugués con 0,91): un falso negativo silencioso. Lo encuentra un segundo instrumento basado en palabras funcionales gallegas. El catalán sí se detecta. |
 
 ---
 
 ## Embeddings: propio contra pre-entrenado
 
 Se entrenaron Word2Vec y FastText sobre el corpus ampliado (118.962 tokens después de
-tokenizar; 255.120 palabras crudas) y se compararon contra el SBW (1.400 millones de
-palabras, unas 10.000 veces más).
-
-**Parámetros del modelo propio y por qué:**
+tokenizar) y se compararon contra el SBW (1.400 millones de palabras, unas 10.000 veces más).
+Los vecinos más cercanos lado a lado están en la sección 3 del notebook.
 
 | Parámetro | Valor | Razón |
 |---|---|---|
@@ -449,30 +355,14 @@ palabras, unas 10.000 veces más).
 
 > Se entrena con `workers=1` y `seed=42`: así el entrenamiento es **reproducible byte a
 > byte** (verificado comparando el hash de los vectores de dos procesos distintos). Con
-> varios hilos no lo es, porque el orden en que los hilos actualizan los pesos varía. Una
-> versión anterior usaba `workers=4`, y una de sus conclusiones (sobre ponderar por IDF) se
-> invirtió al volver reproducible el entrenamiento.
+> varios hilos no lo es, y una de las conclusiones (sobre ponderar por IDF) se invertía.
 
-### Vecinos más cercanos
-
-```
-'magia'
-  word2vec propio      ivy 0.63, mensual 0.57, envolvente 0.56, amora 0.55
-  fasttext propio      maga 0.70, mafia 0.69, mago 0.65, ivy 0.62
-  SBW pre-entrenado    mágico 0.70, mago 0.70, hechizos 0.69, mágicas 0.69
-
-'vampiro'
-  word2vec propio      sarren 0.66, creador 0.62, ewers 0.58, recrean 0.58
-  fasttext propio      vampira 0.87, vampirismo 0.85, vampiros 0.82, zorro 0.64
-  SBW pre-entrenado    vampiros 0.80, vampira 0.74, Drácula 0.74, vampiresa 0.73
-```
-
-Los tres fallan **distinto**, y eso se puede medir. Contando qué fracción de los vecinos
-comparte las primeras 4 letras con la palabra consultada:
+Los tres modelos fallan **distinto**. Fracción de vecinos que comparte las primeras 4 letras
+con la palabra consultada:
 
 | modelo | vecinos por forma | qué significa |
 |---|---|---|
-| word2vec propio | **1%** | Responde a coocurrencia. Pero sus vecinos son nombres de personajes (`sarren`, `ewers`): está memorizando libros concretos, no aprendiendo significado |
+| word2vec propio | **1%** | Responde a coocurrencia, pero sus vecinos son nombres de personajes (`sarren`, `ewers`): memoriza libros concretos, no significado |
 | fasttext propio | **39%** | Responde a la forma escrita. Los n-gramas ayudan con palabras raras (`vampirismo`) pero producen falsos amigos: `magia`→`mafia`, `muerte`→`suerte` |
 | SBW pre-entrenado | **18%** | Responde al significado. Ese 18% son variantes legítimas (`mago`/`magos`) |
 
@@ -480,46 +370,32 @@ comparte las primeras 4 letras con la palabra consultada:
 
 Se construye **promediando** los vectores de las palabras del documento. La tarea de
 evaluación es recuperar libros de la misma saga, usando la columna `serie` como *ground
-truth* que no hubo que anotar a mano.
+truth* que no hubo que anotar a mano:
 
 | representación | MRR | acierto@1 |
 |---|---|---|
 | **TF-IDF (sin embeddings)** | **0,881** | **83,5%** |
+| SBERT (TP2) | 0,828 | 78,5% |
 | word2vec propio, promedio | 0,780 | 68,4% |
 | fasttext propio, promedio | 0,712 | 59,5% |
 | SBW pre-entrenado, promedio | 0,578 | 46,8% |
 
 Dos advertencias: los modelos propios vieron estos 200 libros al entrenar (el corpus
 ampliado los contiene), y dos tomos de Norby tienen la sinopsis idéntica por un error del
-sitio, un par que cualquier representación encuentra en el primer puesto. En el notebook del
-TP2 se agrega SBERT a esta tabla: MRR 0,828, por debajo de TF-IDF.
+sitio.
 
-**Gana TF-IDF y el SBW sale último**, que es lo contrario de lo esperado. La explicación
-está en qué pide la tarea: los libros de una saga comparten **nombres propios**, que son
-palabras rarísimas, y TF-IDF les da el peso máximo justamente por eso. Los embeddings
-*generalizan*, y acá generalizar destruye la señal: el SBW convierte cada nombre propio en
-"un nombre propio más".
+**Gana TF-IDF y el SBW sale último**, que es lo contrario de lo esperado. Los libros de una
+saga comparten **nombres propios**, palabras rarísimas a las que TF-IDF da el peso máximo; los
+embeddings *generalizan*, y acá generalizar destruye la señal. La lección no es que los
+embeddings sean peores, sino que **la representación correcta depende de la tarea**: para
+recuperar «el mismo universo narrativo» conviene lo específico; para recomendar «algo parecido
+pero distinto» conviene lo que generaliza.
 
-La lección no es que los embeddings sean peores, sino que **la representación correcta
-depende de la tarea**. Para recuperar "el mismo universo narrativo" conviene lo específico;
-para recomendar "algo parecido pero distinto", que es lo que querría un recomendador de
-verdad, conviene lo que generaliza.
-
-**Qué se pierde al promediar**, además del orden (`"this is cool"` e `"is this cool"` dan
-similitud 1,0):
-
-- **negación y composición** — ninguna operación conmutativa puede expresar que una palabra
-  modifique a otra, así que `"no es terror"` y `"es terror"` quedan casi en el mismo punto;
-- **dilución** — los documentos largos tienden al centroide del corpus y se parecen entre sí
-  por ser largos, no por el tema;
-- **hubness** — las similitudes se comprimen hacia arriba y aparecen documentos que son
-  vecinos de casi todos.
-
-Se usa igual porque no requiere entrenamiento, es O(n), no tiene hiperparámetros y es la
-línea base honesta contra la cual medir algo más sofisticado.
-
-Ponderar por IDF **no mejora de forma uniforme**: sube el MRR de Word2Vec (+0,016), no
-cambia el de FastText (+0,004) y empeora el del SBW (−0,019).
+Promediar descarta el orden (`"this is cool"` e `"is this cool"` dan similitud 1,0), la
+negación y la composición, y diluye los documentos largos hacia el centroide del corpus. Se
+usa igual porque no requiere entrenamiento, es O(n) y es la línea base honesta contra la cual
+medir algo más sofisticado. Ponderar por IDF **no mejora de forma uniforme**: sube el MRR de
+Word2Vec (+0,016), no cambia el de FastText (+0,004) y empeora el del SBW (−0,019).
 
 ---
 
@@ -551,24 +427,17 @@ corpus.traer_documentos() -> list[Documento]        una sola version: la cruda
 ```
 
 `Documento` **no** tiene un campo `.tokens`, y es deliberado: no existe *la* tokenización
-sino *la que quiere cada modelo*. El día que se agregue un LDA con otra lista de stopwords,
-ese atributo habría que partirlo en `.tokens_tfidf` y `.tokens_lda` — que un atributo
-necesite apellidarse con el nombre del modelo es la señal de que pertenece al modelo.
-
-`tokenizar()` recibe **`str`, no `Documento`**, con lo cual `preprocesamiento.py` no importa
-`corpus.py` nunca y se puede testear con literales, sin base de datos.
-
-Para verlo en funcionamiento:
+sino *la que quiere cada modelo*. Además, `tokenizar()` recibe **`str`, no `Documento`**, con
+lo cual `preprocesamiento.py` no importa `corpus.py` nunca y se puede testear con literales,
+sin base de datos. Para verlo en funcionamiento:
 
 ```bash
 python src/preprocesamiento.py --demo
 ```
 
-Cada decisión de tokenización es una **pérdida deliberada**: bajar a minúsculas pierde las
-entidades nombradas; quitar stopwords pierde las negaciones (`no` está en la lista); el
-patrón de tokens descarta la puntuación y con ella los límites de oración. **Las tildes se
-conservan a propósito**: en castellano distinguen palabras (`papa`/`papá`, `esta`/`está`),
-a diferencia del inglés.
+Cada decisión de tokenización es una **pérdida deliberada** (minúsculas, stopwords, puntuación):
+la sección 1 del notebook las muestra con ejemplos. Las tildes se conservan a propósito: en
+castellano distinguen palabras (`papa`/`papá`, `esta`/`está`).
 
 ---
 
@@ -723,18 +592,19 @@ y por lo tanto paralelizables sin cambiarles una línea.
 ```
 README.md                       este archivo
 TP2_Beltramo_Cortinas_Cura_Maragliano.ipynb   TP2: notebook ejecutado
-queries_propuesta.json          TP2: consultas PROVISIONALES (-> queries.json al validar)
+queries.json                    TP2: conjunto de evaluación (16 consultas validadas)
+informe.pdf                     TP2: informe
 requirements.txt                dependencias de Python
-docker-compose.yml              PostgreSQL 17 en Docker (opcional en el TP2)
+docker-compose.yml              PostgreSQL 17 en Docker (Unidad 2; el TP2 no lo usa)
 .env.example                    plantilla de conexión (copiar a .env; .env no se versiona)
 
 src/
   scraper.py                    UNIDAD 1: extracción (Fases A, B y C)
-  db.py                         conexión a PostgreSQL desde el entorno
-  etl.py                        CSV -> staging -> tabla tipada + verificación
+  db.py                         UNIDAD 2: conexión a PostgreSQL desde el entorno
+  etl.py                        UNIDAD 2: CSV -> staging -> tabla tipada + verificación
   corpus.py                     CSV o PostgreSQL -> list[Documento]   (texto CRUDO)
   preprocesamiento.py           tokenizar()                           (TOKENIZADO)
-  experimentos.py               las cuatro preguntas, medidas
+  experimentos.py               UNIDAD 2: las cuatro preguntas, medidas
   embeddings.py                 Word2Vec/FastText propios contra SBW
   vectores.py                   TP2: validar, normalizar, coseno
   busqueda.py                   TP2: TF-IDF, promedios y SBERT con interfaz común
@@ -747,15 +617,11 @@ sql/
 data/
   libros.csv                    ENTREGABLE: el dataset de 200 libros
   libros_ampliado.csv           corpus de 1700 libros, solo para embeddings
-  *_parcial.jsonl               buffers de trabajo (ignorados por git)
-  modelos/                      embeddings entrenados (ignorados por git)
-  embeddings/                   TP2: matrices guardadas por el notebook (ignoradas)
+  *_parcial.jsonl               buffers de trabajo del scraper (permiten reanudar)
+  modelos/                      embeddings entrenados (no se versionan)
 
 docs/
   diseno_extraccion.md          análisis previo de la Unidad 1 (Parte 1)
-  AUDITORIA_TP2.md              auditoría del TP2: qué estaba, qué se corrigió, qué falta
-  propuesta_queries.md          TP2: las consultas para validar, con casillas
-  informe_borrador.md           TP2: borrador del informe
 
 tests/
   test_parsers.py               pruebas de los parsers, sin red ni base
@@ -763,11 +629,11 @@ tests/
   fixtures/                     HTML de muestra, versionado
 
 tools/
-  generar_notebook.py           TP2: reescribe el notebook desde cero (sin salidas)
   ejecutar_notebook.py          TP2: "reiniciar y ejecutar todo" fuera de Jupyter
 ```
 
-**Para continuar el TP2**, ver [`TRASPASO.md`](TRASPASO.md#continuar-el-tp2-qué-falta-y-cómo-hacerlo).
+El notebook también escribe en `data/` las matrices de embeddings, las figuras y
+`resultados_evaluacion.csv`.
 
 **Fuera del repositorio**, en la carpeta que lo contiene:
 
@@ -776,6 +642,27 @@ SBW-vectors-300-min5.bin.gz     modelo pre-entrenado (1,07 GB)
 ```
 
 ## Principales dificultades encontradas
+
+### TP2
+
+**Los empates de TF-IDF falseaban la precision@k.** TF-IDF da 0 a todo lo que no comparte
+palabras con la consulta, y `argsort` ordena esos empates por posición en el CSV: un ranking
+sin información podía dar P@5 = 1,0 donde corresponde 0,03. Se calcula la precisión *esperada*
+bajo desempate aleatorio, de forma exacta, y hay tests que lo fijan.
+
+**El truncamiento de SBERT se subestimaba contando palabras.** El modelo corta en silencio a
+128 *tokens de subpalabra*: contando palabras se estimaban 118 sinopsis truncadas; con el
+tokenizador del modelo son 172 de 200.
+
+**Una consulta que parecía léxica no lo era.** «Novelas de vampiros» comparte palabras con solo
+1 de sus 6 relevantes, porque los textos dicen «vampiro» o «vampira». Por eso la evaluación
+incluye TF-IDF de n-gramas de caracteres como control: separa lo que falla por morfología de lo
+que falla por semántica.
+
+**Conclusiones escritas antes de medir.** Hubo tres que no sobrevivieron a la medición: «las
+200 sinopsis son castellano» (hay una en gallego), una ablación que no quitaba las palabras con
+tilde, y una sobre ponderar por IDF que dependía de entrenar con varios hilos. Desde entonces,
+cuando un texto afirma un número, el número sale de la corrida.
 
 ### Unidad 2
 
